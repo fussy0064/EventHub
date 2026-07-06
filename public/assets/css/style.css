@@ -14,3 +14,62 @@ body {
     background-color: #0d6efd;
     border-color: #0d6efd;
 }
+
+/* Sidebar hamburger toggler */
+.sidebar-toggler {
+    padding: 0.3rem 0.5rem;
+    line-height: 1;
+    border-color: rgba(255,255,255,0.3);
+}
+
+.sidebar-toggler:hover {
+    background-color: rgba(255,255,255,0.15);
+}
+
+/* Offcanvas sidebar */
+#sidebarOffcanvas .list-group-item {
+    padding: 0.85rem 1.25rem;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+#sidebarOffcanvas .list-group-item:hover:not(.active) {
+    background-color: #f0f4ff;
+    border-left-color: #0d6efd;
+}
+
+#sidebarOffcanvas .list-group-item.active {
+    border-left-color: #0d6efd;
+}
+
+/* Password toggle eye icon */
+.password-toggle-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-toggle-wrapper input {
+    padding-right: 2.5rem;
+}
+
+.password-toggle-icon {
+    position: absolute;
+    right: 0.6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    padding: 0.15rem;
+    border-radius: 0.2rem;
+    transition: color 0.2s ease;
+}
+
+.password-toggle-icon:hover {
+    color: #0d6efd;
+}

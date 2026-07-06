@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS users (
     name VARBINARY(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('organizer', 'attendee') NOT NULL DEFAULT 'attendee',
+    role ENUM('organizer', 'attendee', 'admin') NOT NULL DEFAULT 'attendee',
+    is_approved TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

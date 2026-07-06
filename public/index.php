@@ -80,10 +80,10 @@ require __DIR__ . '/partials/header.php';
                         <td><?php echo htmlspecialchars(sprintf('$%.2f', $event->getPrice()), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td class="text-end">
                             <?php if ($currentUser === null): ?>
-                                <a class="btn btn-sm btn-outline-primary" href="/login.php">Login to Book</a>
+                                <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/login.php'); ?>">Login to Book</a>
                             <?php elseif ($currentUser['role'] === 'attendee'): ?>
                                 <?php if ($event->getTicketsAvailable() > 0): ?>
-                                    <form method="post" action="/index.php" class="d-inline-flex gap-1 align-items-center">
+                                    <form method="post" action="<?php echo app_url('/index.php'); ?>" class="d-inline-flex gap-1 align-items-center">
                                         <input type="hidden" name="event_id" value="<?php echo $event->getId(); ?>">
                                         <input type="number" name="tickets" class="form-control form-control-sm" style="width: 70px;" min="1" max="<?php echo $event->getTicketsAvailable(); ?>" value="1" required>
                                         <button type="submit" name="action" value="book" class="btn btn-sm btn-primary">Book</button>

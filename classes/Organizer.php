@@ -61,4 +61,47 @@ class Organizer extends User
             'bookings' => $bookings
         ];
     }
+
+    public function delete(): bool
+    {
+        if (!$this->db || $this->id === null) {
+            return false;
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            require_once __DIR__ . '/Event.php';
+            require_once __DIR__ . '/Booking.php';
+
+            // Find all events owned by this organizer
+            $stmt = $this->db->prepare('SELECT id FROM events WHERE organizer_id = :organizer_id');
+            $stmt->execute(['organizer_id' => $this->id]);
+            $eventIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            foreach ($eventIds as $eventId) {
+                // Delete bookings for this event directly to avoid foreign key violations
+                $delBookingsStmt = $this->db->prepare('DELETE FROM bookings WHERE event_id = :event_id');
+                $delBookingsStmt->execute(['event_id' => $eventId]);
+
+                // Delete the event
+                $event = Event::find($this->db, (int) $eventId);
+                if ($event !== null) {
+                    $event->delete();
+                }
+            }
+
+            // Finally, delete the organizer user record
+            $result = parent::delete();
+
+            $this->db->commit();
+            return $result;
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            app_set_flash('error', 'Failed to delete organizer: ' . $e->getMessage());
+            return false;
+        }
+    }
 }

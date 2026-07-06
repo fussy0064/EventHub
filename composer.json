@@ -1,0 +1,17 @@
+{
+    "name": "eventhub/eventhub",
+    "description": "EventHub - Event browsing and booking platform",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1",
+        "ext-pdo": "*",
+        "ext-openssl": "*",
+        "ext-mbstring": "*"
+    },
+    "config": {
+        "platform": {
+            "php": "8.1"
+        }
+    }
+}

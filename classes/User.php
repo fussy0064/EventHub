@@ -11,6 +11,7 @@ class User extends DatabaseModel
     protected string $email = '';
     protected string $passwordHash = '';
     protected string $role = 'attendee';
+    protected bool $isApproved = true;
 
     public function getId(): ?int
     {
@@ -54,10 +55,20 @@ class User extends DatabaseModel
 
     public function setRole(string $role): void
     {
-        $allowedRoles = ['attendee', 'organizer'];
+        $allowedRoles = ['attendee', 'organizer', 'admin'];
         if (in_array($role, $allowedRoles, true)) {
             $this->role = $role;
         }
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->isApproved;
+    }
+
+    public function setApproved(bool $approved): void
+    {
+        $this->isApproved = $approved;
     }
 
     public function save(): bool
@@ -70,14 +81,15 @@ class User extends DatabaseModel
 
         if ($this->id === null) {
             $stmt = $this->db->prepare('
-                INSERT INTO users (name, email, password_hash, role)
-                VALUES (:name, :email, :password_hash, :role)
+                INSERT INTO users (name, email, password_hash, role, is_approved)
+                VALUES (:name, :email, :password_hash, :role, :is_approved)
             ');
             $result = $stmt->execute([
                 'name' => $encryptedName,
                 'email' => $this->email,
                 'password_hash' => $this->passwordHash,
-                'role' => $this->role
+                'role' => $this->role,
+                'is_approved' => $this->isApproved ? 1 : 0
             ]);
             if ($result) {
                 $this->id = (int) $this->db->lastInsertId();
@@ -87,7 +99,7 @@ class User extends DatabaseModel
         } else {
             $stmt = $this->db->prepare('
                 UPDATE users
-                SET name = :name, email = :email, password_hash = :password_hash, role = :role
+                SET name = :name, email = :email, password_hash = :password_hash, role = :role, is_approved = :is_approved
                 WHERE id = :id
             ');
             return $stmt->execute([
@@ -95,7 +107,8 @@ class User extends DatabaseModel
                 'name' => $encryptedName,
                 'email' => $this->email,
                 'password_hash' => $this->passwordHash,
-                'role' => $this->role
+                'role' => $this->role,
+                'is_approved' => $this->isApproved ? 1 : 0
             ]);
         }
     }
@@ -135,13 +148,21 @@ class User extends DatabaseModel
     {
         require_once __DIR__ . '/Organizer.php';
         require_once __DIR__ . '/Attendee.php';
+        require_once __DIR__ . '/Admin.php';
 
         $role = $row['role'] ?? 'attendee';
-        $user = ($role === 'organizer') ? new Organizer($db) : new Attendee($db);
+        if ($role === 'admin') {
+            $user = new Admin($db);
+        } elseif ($role === 'organizer') {
+            $user = new Organizer($db);
+        } else {
+            $user = new Attendee($db);
+        }
         $user->id = (int) $row['id'];
         $user->setEmail($row['email']);
         $user->passwordHash = $row['password_hash'];
         $user->setName(app_decrypt($row['name']));
+        $user->isApproved = (bool) ($row['is_approved'] ?? true);
         return $user;
     }
 }

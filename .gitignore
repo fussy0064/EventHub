@@ -1,1 +1,11 @@
 .env
+vendor/
+composer.lock
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+node_modules/

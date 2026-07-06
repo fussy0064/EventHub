@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/database.php';
 
-// Load environment configuration file if it exists
+// Load environment configuration file if it exists (not used in production on AWS)
 if (file_exists(__DIR__ . '/../.env')) {
     $env = parse_ini_file(__DIR__ . '/../.env');
     if ($env !== false) {
@@ -16,8 +16,28 @@ if (file_exists(__DIR__ . '/../.env')) {
     }
 }
 
+// Determine application environment
+$appEnv = getenv('APP_ENV') ?: 'development';
 
+// Configure error reporting based on environment
+if ($appEnv === 'production') {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    ini_set('error_log', '/var/log/app-error.log');
+} else {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+}
+
+// Configure session for production
 if (session_status() === PHP_SESSION_NONE) {
+    if ($appEnv === 'production') {
+        ini_set('session.cookie_httponly', '1');
+        ini_set('session.cookie_secure', '1');
+        ini_set('session.use_strict_mode', '1');
+        ini_set('session.cookie_samesite', 'Lax');
+    }
     session_start();
 }
 
@@ -52,9 +72,21 @@ function app_get_flash(string $type): ?string
     return $message;
 }
 
+function app_url(string $path): string
+{
+    static $basePath = null;
+    if ($basePath === null) {
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $dir = dirname($scriptName);
+        $basePath = ($dir === DIRECTORY_SEPARATOR) ? '' : $dir;
+    }
+    $path = '/' . ltrim($path, '/');
+    return $basePath . $path;
+}
+
 function app_redirect(string $path): never
 {
-    header('Location: ' . $path);
+    header('Location: ' . app_url($path));
     exit;
 }
 
