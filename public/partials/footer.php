@@ -118,6 +118,19 @@ document.addEventListener('click', function (e) {
                     }
                 }
             }
+
+            if (action === 'admin_approve_organizer') {
+                const countEl = document.getElementById('pending-organizers-count');
+                const banner = document.getElementById('pending-organizers-banner');
+                if (countEl) {
+                    const remaining = Math.max(0, parseInt(countEl.textContent, 10) - 1);
+                    if (remaining === 0 && banner) {
+                        banner.style.display = 'none';
+                    } else {
+                        countEl.textContent = remaining + ' organizer(s)';
+                    }
+                }
+            }
         })
         .catch(function () {
             alert('Network error. Please try again.');
