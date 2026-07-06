@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/app.php';
 
-app_require_role(['organizer']);
+app_require_role(['organizer', 'admin']);
 
 $formError = null;
 

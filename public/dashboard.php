@@ -196,9 +196,14 @@ require __DIR__ . '/partials/header.php';
                     <h1 class="h4 mb-1">Welcome, <?php echo htmlspecialchars($user->getName(), ENT_QUOTES, 'UTF-8'); ?></h1>
                     <div class="text-muted">Account Email: <?php echo htmlspecialchars($user->getEmail(), ENT_QUOTES, 'UTF-8'); ?></div>
                 </div>
-                <?php if ($user->getRole() === 'organizer'): ?>
+                <div class="d-flex gap-2">
+                <?php if ($user->getRole() === 'organizer' || $user->getRole() === 'admin'): ?>
                     <a class="btn btn-primary" href="<?php echo app_url('/create-event.php'); ?>">Create Event</a>
                 <?php endif; ?>
+                <?php if ($user->getRole() === 'admin'): ?>
+                    <a class="btn btn-outline-primary" href="<?php echo app_url('/create-user.php'); ?>">Create User</a>
+                <?php endif; ?>
+                </div>
             </div>
         </div>
 
