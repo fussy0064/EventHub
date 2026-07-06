@@ -74,6 +74,56 @@ function togglePassword(toggleEl) {
         eyeSlashIcon.classList.add('d-none');
     }
 }
+
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.js-admin-action');
+    if (!btn) return;
+
+    const confirmMsg = btn.dataset.confirm;
+    if (confirmMsg && !confirm(confirmMsg)) return;
+
+    const action = btn.dataset.action;
+    const userId = btn.dataset.userId;
+    const approveAction = btn.dataset.approveAction || '';
+    const row = document.getElementById('user-row-' + userId);
+
+    btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('action', action);
+    formData.append('user_id', userId);
+    if (approveAction) {
+        formData.append('approve_action', approveAction);
+    }
+
+    fetch('<?php echo app_url('/api/admin_action.php'); ?>', {
+        method: 'POST',
+        body: formData
+    })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                alert(data.message || 'Action failed.');
+                btn.disabled = false;
+                return;
+            }
+
+            if (action === 'admin_delete_user' || approveAction === 'reject') {
+                if (row) row.remove();
+            } else if (action === 'admin_approve_organizer' && approveAction === 'approve') {
+                if (row) {
+                    const statusCell = row.querySelector('td:nth-child(5)');
+                    if (statusCell) {
+                        statusCell.innerHTML = '<span class="badge bg-success">Approved</span>';
+                    }
+                }
+            }
+        })
+        .catch(function () {
+            alert('Network error. Please try again.');
+            btn.disabled = false;
+        });
+});
 </script>
 </body>
 </html>

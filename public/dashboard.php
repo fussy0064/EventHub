@@ -240,7 +240,7 @@ require __DIR__ . '/partials/header.php';
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($users as $u): ?>
-                                    <tr class="<?php echo ($u->getRole() === 'organizer' && !$u->isApproved()) ? 'table-warning' : ''; ?>">
+                                    <tr id="user-row-<?php echo $u->getId(); ?>" class="<?php echo ($u->getRole() === 'organizer' && !$u->isApproved()) ? 'table-warning' : ''; ?>">
                                         <td><?php echo $u->getId(); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($u->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($u->getEmail(), ENT_QUOTES, 'UTF-8'); ?></td>
@@ -261,13 +261,17 @@ require __DIR__ . '/partials/header.php';
                                         </td>
                                         <td>
                                             <?php if ($u->getRole() === 'organizer' && !$u->isApproved()): ?>
-                                                <span class="badge bg-warning text-dark">Pending Approval</span>
-                                                <form method="post" action="" class="d-inline-flex gap-1 mt-1">
-                                                    <input type="hidden" name="user_id" value="<?php echo $u->getId(); ?>">
-                                                    <input type="hidden" name="action" value="admin_approve_organizer">
-                                                    <button type="submit" name="approve_action" value="approve" class="btn btn-sm btn-success" onclick="return confirm('Approve this organizer?');">Approve</button>
-                                                    <button type="submit" name="approve_action" value="reject" class="btn btn-sm btn-danger" onclick="return confirm('Reject and delete this organizer account?');">Reject</button>
-                                                </form>
+                                                <span class="badge bg-warning text-dark js-status-badge">Pending Approval</span>
+                                                <div class="d-inline-flex gap-1 mt-1">
+                                                    <button type="button" class="btn btn-sm btn-success js-admin-action"
+                                                        data-action="admin_approve_organizer" data-approve-action="approve"
+                                                        data-user-id="<?php echo $u->getId(); ?>"
+                                                        data-confirm="Approve this organizer?">Approve</button>
+                                                    <button type="button" class="btn btn-sm btn-danger js-admin-action"
+                                                        data-action="admin_approve_organizer" data-approve-action="reject"
+                                                        data-user-id="<?php echo $u->getId(); ?>"
+                                                        data-confirm="Reject and delete this organizer account?">Reject</button>
+                                                </div>
                                             <?php elseif ($u->isApproved()): ?>
                                                 <span class="badge bg-success">Approved</span>
                                             <?php else: ?>
@@ -290,10 +294,10 @@ require __DIR__ . '/partials/header.php';
                                                 </form>
 
                                                 <?php if ($u->getId() !== $user->getId()): ?>
-                                                    <form method="post" action="" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this user? This will also clean up all their booking history/events.');">
-                                                        <input type="hidden" name="user_id" value="<?php echo $u->getId(); ?>">
-                                                        <button type="submit" name="action" value="admin_delete_user" class="btn btn-sm btn-danger">Delete</button>
-                                                    </form>
+                                                    <button type="button" class="btn btn-sm btn-danger js-admin-action"
+                                                        data-action="admin_delete_user"
+                                                        data-user-id="<?php echo $u->getId(); ?>"
+                                                        data-confirm="Are you sure you want to delete this user? This will also clean up all their booking history/events.">Delete</button>
                                                 <?php else: ?>
                                                     <span class="text-muted small italic">(You)</span>
                                                 <?php endif; ?>

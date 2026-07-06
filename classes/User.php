@@ -118,8 +118,36 @@ class User extends DatabaseModel
         if (!$this->db || $this->id === null) {
             return false;
         }
-        $stmt = $this->db->prepare('DELETE FROM users WHERE id = :id');
-        return $stmt->execute(['id' => $this->id]);
+
+        try {
+            $this->db->beginTransaction();
+
+            // Delete bookings for events this user organizes (if organizer)
+            $stmt = $this->db->prepare('
+                DELETE b FROM bookings b
+                INNER JOIN events e ON b.event_id = e.id
+                WHERE e.organizer_id = :id
+            ');
+            $stmt->execute(['id' => $this->id]);
+
+            // Delete events this user organizes (if organizer)
+            $stmt = $this->db->prepare('DELETE FROM events WHERE organizer_id = :id');
+            $stmt->execute(['id' => $this->id]);
+
+            // Delete this user's own bookings (if attendee)
+            $stmt = $this->db->prepare('DELETE FROM bookings WHERE user_id = :id');
+            $stmt->execute(['id' => $this->id]);
+
+            // Delete the user
+            $stmt = $this->db->prepare('DELETE FROM users WHERE id = :id');
+            $stmt->execute(['id' => $this->id]);
+
+            $this->db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return false;
+        }
     }
 
     public static function findById(PDO $db, int $id): ?User
