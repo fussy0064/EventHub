@@ -64,6 +64,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'organ
     app_redirect('/dashboard.php');
 }
 
+// Handle Event Deletion (organizer can delete own events, admin can delete any event)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_event' && in_array($user->getRole(), ['organizer', 'admin'], true)) {
+    require_once __DIR__ . '/../classes/Event.php';
+    $eventId = (int) ($_POST['event_id'] ?? 0);
+    $eventToDelete = Event::find($db, $eventId);
+
+    if ($eventToDelete === null) {
+        app_set_flash('error', 'Event not found.');
+    } elseif ($user->getRole() === 'organizer' && $eventToDelete->getOrganizerId() !== $user->getId()) {
+        app_set_flash('error', 'Unauthorized action.');
+    } else {
+        if (Event::deleteWithRelations($db, $eventId)) {
+            app_set_flash('success', 'Event deleted successfully.');
+        } else {
+            app_set_flash('error', 'Failed to delete event.');
+        }
+    }
+    app_redirect('/dashboard.php');
+}
+
 $dashboardData = $user->getDashboard();
 $bookings = $dashboardData['bookings'] ?? [];
 $users = $dashboardData['users'] ?? [];
@@ -354,16 +374,18 @@ require __DIR__ . '/partials/header.php';
                                 <th>Location</th>
                                 <th>From Price</th>
                                 <th>Total Tickets Left</th>
+                                <th>Status</th>
+                                <th>Actions</th>
                             </tr>
                             </thead>
                             <tbody>
                             <?php if (empty($dashboardData['events'])): ?>
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">No events created yet.</td>
+                                    <td colspan="8" class="text-center text-muted py-4">No events created yet.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($dashboardData['events'] as $ev): ?>
-                                    <?php $evObj = $ev['object']; ?>
+                                    <?php $evObj = $ev['object']; $statusBadge = $evObj->getStatusBadge(); ?>
                                     <tr>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($evObj->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($ev['organizer_name'], ENT_QUOTES, 'UTF-8'); ?> <span class="text-muted small">(<?php echo htmlspecialchars($ev['organizer_email'], ENT_QUOTES, 'UTF-8'); ?>)</span></td>
@@ -371,6 +393,16 @@ require __DIR__ . '/partials/header.php';
                                         <td><?php echo htmlspecialchars($evObj->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td>Tshs <?php echo number_format($evObj->getPrice(), 2); ?></td>
                                         <td><?php echo $evObj->getTicketsAvailable(); ?></td>
+                                        <td><span class="badge <?php echo $statusBadge['badge']; ?>"><?php echo htmlspecialchars($statusBadge['label'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/edit-event.php?id=' . $evObj->getId()); ?>">Edit</a>
+                                                <form method="post" action="" onsubmit="return confirm('Are you sure you want to delete this event? This will also remove its ticket classes and bookings.');">
+                                                    <input type="hidden" name="event_id" value="<?php echo $evObj->getId(); ?>">
+                                                    <button type="submit" name="action" value="delete_event" class="btn btn-sm btn-danger">Delete</button>
+                                                </form>
+                                            </div>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -424,16 +456,18 @@ require __DIR__ . '/partials/header.php';
                             <th>Classes (Price / Left)</th>
                             <th>Tickets Sold</th>
                             <th>Revenue</th>
+                            <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                         </thead>
                         <tbody>
                         <?php if (empty($dashboardData['events'])): ?>
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">You have not created any events yet.</td>
+                                <td colspan="8" class="text-center text-muted py-4">You have not created any events yet.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($dashboardData['events'] as $e): ?>
-                                <?php $eventObj = $e['object']; ?>
+                                <?php $eventObj = $e['object']; $statusBadge = $eventObj->getStatusBadge(); ?>
                                 <tr>
                                     <td class="fw-semibold"><?php echo htmlspecialchars($eventObj->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($eventObj->getDateTime())), ENT_QUOTES, 'UTF-8'); ?></td>
@@ -454,6 +488,16 @@ require __DIR__ . '/partials/header.php';
                                     </td>
                                     <td><?php echo $e['tickets_sold']; ?></td>
                                     <td class="fw-semibold">Tshs <?php echo number_format($e['revenue'], 2); ?></td>
+                                    <td><span class="badge <?php echo $statusBadge['badge']; ?>"><?php echo htmlspecialchars($statusBadge['label'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                    <td>
+                                        <div class="d-flex gap-1">
+                                            <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/edit-event.php?id=' . $eventObj->getId()); ?>">Edit</a>
+                                            <form method="post" action="" onsubmit="return confirm('Are you sure you want to delete this event? This will also remove its ticket classes and bookings.');">
+                                                <input type="hidden" name="event_id" value="<?php echo $eventObj->getId(); ?>">
+                                                <button type="submit" name="action" value="delete_event" class="btn btn-sm btn-danger">Delete</button>
+                                            </form>
+                                        </div>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

@@ -149,6 +149,70 @@ class Event extends DatabaseModel
         return $stmt->execute(['id' => $this->id]);
     }
 
+    /**
+     * Deletes an event along with its ticket classes and bookings,
+     * since the schema has no ON DELETE CASCADE for those foreign keys.
+     */
+    public static function deleteWithRelations(PDO $db, int $eventId): bool
+    {
+        try {
+            $db->beginTransaction();
+
+            $delBookings = $db->prepare('DELETE FROM bookings WHERE event_id = :event_id');
+            $delBookings->execute(['event_id' => $eventId]);
+
+            $delClasses = $db->prepare('DELETE FROM event_ticket_classes WHERE event_id = :event_id');
+            $delClasses->execute(['event_id' => $eventId]);
+
+            $delEvent = $db->prepare('DELETE FROM events WHERE id = :id');
+            $result = $delEvent->execute(['id' => $eventId]);
+
+            $db->commit();
+            return $result;
+        } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Returns the event's lifecycle status relative to now:
+     * 'upcoming' (in the future), 'live' (happening today), or 'done' (in the past).
+     */
+    public function getStatus(): string
+    {
+        $now = new DateTime();
+        try {
+            $eventDate = new DateTime($this->dateTime);
+        } catch (Exception $e) {
+            return 'upcoming';
+        }
+
+        if ($eventDate->format('Y-m-d') === $now->format('Y-m-d')) {
+            return 'live';
+        }
+
+        return $eventDate > $now ? 'upcoming' : 'done';
+    }
+
+    /**
+     * Human-friendly label + Bootstrap badge class for the event's status.
+     * Returns ['label' => string, 'badge' => string].
+     */
+    public function getStatusBadge(): array
+    {
+        switch ($this->getStatus()) {
+            case 'live':
+                return ['label' => 'Live / Ongoing', 'badge' => 'bg-danger'];
+            case 'done':
+                return ['label' => 'Done', 'badge' => 'bg-secondary'];
+            default:
+                return ['label' => 'Upcoming', 'badge' => 'bg-success'];
+        }
+    }
+
     public static function find(PDO $db, int $id): ?Event
     {
         $stmt = $db->prepare('SELECT * FROM events WHERE id = :id LIMIT 1');
