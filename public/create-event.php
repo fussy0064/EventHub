@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../classes/Event.php';
+require_once __DIR__ . '/../classes/TicketClass.php';
 
 app_require_role(['organizer', 'admin']);
 
@@ -29,9 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($totalTickets < 1) {
         $formError = 'Add at least one ticket in one of the classes (VVIP, VIP, or Regular).';
     } else {
-        require_once __DIR__ . '/../classes/Event.php';
-        require_once __DIR__ . '/../classes/TicketClass.php';
-
         $db = app_db();
         $event = new Event($db);
         $event->setOrganizerId((int) app_current_user()['id']);
@@ -63,8 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-require_once __DIR__ . '/../classes/TicketClass.php';
 
 $pageTitle = 'Create Event';
 require __DIR__ . '/partials/header.php';
@@ -111,4 +108,3 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <?php require __DIR__ . '/partials/footer.php'; ?>
-
