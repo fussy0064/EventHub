@@ -315,6 +315,46 @@ require __DIR__ . '/partials/header.php';
                 </div>
             </div>
 
+            <!-- All Events (Admin view) -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">All Events</h2>
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                            <tr>
+                                <th>Event</th>
+                                <th>Created By</th>
+                                <th>Date & Time</th>
+                                <th>Location</th>
+                                <th>Price</th>
+                                <th>Tickets Left</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <?php if (empty($dashboardData['events'])): ?>
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No events created yet.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($dashboardData['events'] as $ev): ?>
+                                    <?php $evObj = $ev['object']; ?>
+                                    <tr>
+                                        <td class="fw-semibold"><?php echo htmlspecialchars($evObj->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars($ev['organizer_name'], ENT_QUOTES, 'UTF-8'); ?> <span class="text-muted small">(<?php echo htmlspecialchars($ev['organizer_email'], ENT_QUOTES, 'UTF-8'); ?>)</span></td>
+                                        <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($evObj->getDateTime())), ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars($evObj->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td>Tshs <?php echo number_format($evObj->getPrice(), 2); ?></td>
+                                        <td><?php echo $evObj->getTicketsAvailable(); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         <?php elseif ($dashboardData['type'] === 'organizer'): ?>
             <!-- Organizer Dashboard Cards -->
             <div class="row g-3 mb-4">
@@ -502,10 +542,13 @@ require __DIR__ . '/partials/header.php';
                                         </td>
                                         <td>
                                             <?php if ($b['status'] === 'confirmed'): ?>
-                                                <form method="post" action="" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
-                                                    <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
-                                                    <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel</button>
-                                                </form>
+                                                <div class="d-flex gap-1">
+                                                    <a href="<?php echo app_url('/ticket.php?id=' . $b['id']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">Print Ticket</a>
+                                                    <form method="post" action="" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
+                                                        <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
+                                                        <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel</button>
+                                                    </form>
+                                                </div>
                                             <?php else: ?>
                                                 <button class="btn btn-sm btn-outline-secondary" disabled>Cancelled</button>
                                             <?php endif; ?>

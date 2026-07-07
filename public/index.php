@@ -8,20 +8,37 @@ require_once __DIR__ . '/../classes/Booking.php';
 $db = app_db();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book') {
-    app_require_role(['attendee']);
+    app_require_role(['attendee', 'organizer']);
+    require_once __DIR__ . '/../classes/User.php';
 
     $eventId = (int) ($_POST['event_id'] ?? 0);
     $tickets = (int) ($_POST['tickets'] ?? 0);
+    $currentUser = app_current_user();
+
+    // Organizers book on behalf of an attendee (by email); attendees book for themselves
+    if ($currentUser['role'] === 'organizer') {
+        $attendeeEmail = strtolower(trim((string) ($_POST['attendee_email'] ?? '')));
+        $attendee = $attendeeEmail !== '' ? User::findByEmail($db, $attendeeEmail) : null;
+
+        if ($attendee === null || $attendee->getRole() !== 'attendee') {
+            app_set_flash('error', 'No attendee account found with that email.');
+            $targetUserId = null;
+        } else {
+            $targetUserId = $attendee->getId();
+        }
+    } else {
+        $targetUserId = (int) $currentUser['id'];
+    }
 
     if ($tickets < 1) {
         app_set_flash('error', 'Please select a valid number of tickets.');
-    } else {
+    } elseif ($targetUserId !== null) {
         $event = Event::find($db, $eventId);
         if (!$event) {
             app_set_flash('error', 'Event not found.');
         } else {
             $booking = new Booking($db);
-            $booking->setUserId((int) app_current_user()['id']);
+            $booking->setUserId($targetUserId);
             $booking->setEventId($eventId);
             $booking->setTicketsBooked($tickets);
             $booking->setStatus('confirmed');
@@ -77,23 +94,26 @@ require __DIR__ . '/partials/header.php';
                         <td class="fw-semibold"><?php echo htmlspecialchars($event->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($event->getDateTime())), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars($event->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
-                        <td><?php echo htmlspecialchars(sprintf('$%.2f', $event->getPrice()), ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td><?php echo htmlspecialchars('Tshs ' . number_format($event->getPrice(), 2), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td class="text-end">
                             <?php if ($currentUser === null): ?>
                                 <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/login.php'); ?>">Login to Book</a>
-                            <?php elseif ($currentUser['role'] === 'attendee'): ?>
+                            <?php elseif ($currentUser['role'] === 'attendee' || $currentUser['role'] === 'organizer'): ?>
                                 <?php if ($event->getTicketsAvailable() > 0): ?>
-                                    <form method="post" action="<?php echo app_url('/index.php'); ?>" class="d-inline-flex gap-1 align-items-center">
+                                    <form method="post" action="<?php echo app_url('/index.php'); ?>" class="d-inline-flex gap-1 align-items-center flex-wrap">
                                         <input type="hidden" name="event_id" value="<?php echo $event->getId(); ?>">
+                                        <?php if ($currentUser['role'] === 'organizer'): ?>
+                                            <input type="email" name="attendee_email" class="form-control form-control-sm" style="width: 160px;" placeholder="Attendee email" required>
+                                        <?php endif; ?>
                                         <input type="number" name="tickets" class="form-control form-control-sm" style="width: 70px;" min="1" max="<?php echo $event->getTicketsAvailable(); ?>" value="1" required>
-                                        <button type="submit" name="action" value="book" class="btn btn-sm btn-primary">Book</button>
+                                        <button type="submit" name="action" value="book" class="btn btn-sm btn-primary"><?php echo ($currentUser['role'] === 'organizer') ? 'Book for Attendee' : 'Book'; ?></button>
                                         <span class="text-muted small ms-1">(<?php echo $event->getTicketsAvailable(); ?> left)</span>
                                     </form>
                                 <?php else: ?>
                                     <span class="badge bg-danger">Sold Out</span>
                                 <?php endif; ?>
                             <?php else: ?>
-                                <span class="badge bg-secondary">Organizer View</span>
+                                <span class="badge bg-secondary">-</span>
                             <?php endif; ?>
                         </td>
                     </tr>

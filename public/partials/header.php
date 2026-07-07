@@ -19,7 +19,7 @@ $currentScript = basename($_SERVER['PHP_SELF']);
     <link href="<?php echo app_url('/assets/css/style.css'); ?>" rel="stylesheet">
 </head>
 <body class="bg-light">
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom no-print">
     <div class="container-fluid">
         <?php if ($currentUser !== null): ?>
             <button class="btn btn-outline-light me-2 sidebar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarOffcanvas" aria-label="Toggle navigation menu">

@@ -135,6 +135,10 @@ For local development, use `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` in you
 - **Fixed:** Deleting a user with existing events/bookings used to fail (foreign key error). Delete now cleans up related events/bookings in one transaction.
 - **Improved:** Admin Approve / Reject / Delete now update the table instantly (AJAX) — no more full page reload.
 - **Added:** Admin can now create Events (previously organizer-only) and create Users directly (Attendee/Organizer, auto-approved, no approval queue).
+- **Changed:** All prices now show as "Tshs" instead of "$".
+- **Added:** Admin dashboard shows a full list of every event and who created it.
+- **Added:** Attendees can print a ticket (Dashboard → Print Ticket) after booking.
+- **Added:** Organizers can book a ticket for an attendee (by email) directly from the event listing page.
 
 ## Currency
 
