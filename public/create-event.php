@@ -12,8 +12,13 @@ $formError = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim((string) ($_POST['name'] ?? ''));
     $location = trim((string) ($_POST['location'] ?? ''));
-    $dateTime = (string) ($_POST['date_time'] ?? '');
+    $eventDate = (string) ($_POST['event_date'] ?? '');
+    $startTime = (string) ($_POST['start_time'] ?? '');
+    $endTime = (string) ($_POST['end_time'] ?? '');
     $description = trim((string) ($_POST['description'] ?? ''));
+
+    // Combine Date and Start Time into a single string for storage
+    $dateTime = trim($eventDate . ' ' . $startTime);
 
     // One price + ticket count per class: VVIP, VIP, Regular
     $classInput = [];
@@ -26,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $totalTickets += $classTickets;
     }
 
-    if ($name === '' || $location === '' || $dateTime === '' || $description === '') {
+    if ($name === '' || $location === '' || $eventDate === '' || $startTime === '' || $endTime === '' || $description === '') {
         $formError = 'Complete all event fields before saving.';
     } elseif ($totalTickets < 1) {
         $formError = 'Add at least one ticket in one of the classes (VVIP, VIP, or Regular).';
@@ -76,10 +81,30 @@ require __DIR__ . '/partials/header.php';
                 <?php endif; ?>
                 <form method="post" action="">
                     <div class="row g-3">
-                        <div class="col-md-6"><label class="form-label">Event Name</label><input type="text" class="form-control" name="name" value="<?php echo htmlspecialchars((string) ($_POST['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required></div>
-                        <div class="col-md-6"><label class="form-label">Location</label><input type="text" class="form-control" name="location" value="<?php echo htmlspecialchars((string) ($_POST['location'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required></div>
-                        <div class="col-md-6"><label class="form-label">Date & Time</label><input type="datetime-local" class="form-control" name="date_time" value="<?php echo htmlspecialchars((string) ($_POST['date_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required></div>
-                        <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="4" required><?php echo htmlspecialchars((string) ($_POST['description'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea></div>
+                        <div class="col-md-6">
+                            <label class="form-label">Event Name</label>
+                            <input type="text" class="form-control" name="name" value="<?php echo htmlspecialchars((string) ($_POST['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Location</label>
+                            <input type="text" class="form-control" name="location" value="<?php echo htmlspecialchars((string) ($_POST['location'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Event Date</label>
+                            <input type="date" class="form-control" name="event_date" value="<?php echo htmlspecialchars((string) ($_POST['event_date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Start Time</label>
+                            <input type="time" class="form-control" name="start_time" value="<?php echo htmlspecialchars((string) ($_POST['start_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">End Time</label>
+                            <input type="time" class="form-control" name="end_time" value="<?php echo htmlspecialchars((string) ($_POST['end_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" name="description" rows="4" required><?php echo htmlspecialchars((string) ($_POST['description'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
                     </div>
 
                     <hr class="my-4">
