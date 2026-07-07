@@ -16,6 +16,7 @@ class Organizer extends User
     {
         require_once __DIR__ . '/Event.php';
         require_once __DIR__ . '/Booking.php';
+        require_once __DIR__ . '/TicketClass.php';
 
         $stmt = $this->db->prepare('SELECT * FROM events WHERE organizer_id = :organizer_id ORDER BY date_time ASC');
         $stmt->execute(['organizer_id' => $this->id]);
@@ -27,24 +28,39 @@ class Organizer extends User
 
         while ($row = $stmt->fetch()) {
             $event = Event::fromRow($this->db, $row);
+            $classes = TicketClass::findByEventId($this->db, (int) $event->getId());
 
-            $bookingStmt = $this->db->prepare('
-                SELECT SUM(tickets_booked) AS tickets_sold 
-                FROM bookings 
+            // Tickets sold (confirmed) per class, for this event
+            $soldStmt = $this->db->prepare('
+                SELECT ticket_class_id, SUM(tickets_booked) AS tickets_sold
+                FROM bookings
                 WHERE event_id = :event_id AND status = "confirmed"
+                GROUP BY ticket_class_id
             ');
-            $bookingStmt->execute(['event_id' => $event->getId()]);
-            $bookingRow = $bookingStmt->fetch();
-            $ticketsSold = (int) ($bookingRow['tickets_sold'] ?? 0);
+            $soldStmt->execute(['event_id' => $event->getId()]);
+            $soldByClass = [];
+            while ($soldRow = $soldStmt->fetch()) {
+                $soldByClass[(int) $soldRow['ticket_class_id']] = (int) $soldRow['tickets_sold'];
+            }
+
+            $eventTicketsSold = 0;
+            $eventRevenue = 0.0;
+            foreach ($classes as $class) {
+                $sold = $soldByClass[$class->getId()] ?? 0;
+                $eventTicketsSold += $sold;
+                $eventRevenue += $sold * $class->getPrice();
+            }
 
             $events[] = [
                 'object' => $event,
-                'tickets_sold' => $ticketsSold
+                'classes' => $classes,
+                'tickets_sold' => $eventTicketsSold,
+                'revenue' => $eventRevenue
             ];
 
             $totalEvents++;
-            $totalTicketsSold += $ticketsSold;
-            $totalRevenue += ($ticketsSold * $event->getPrice());
+            $totalTicketsSold += $eventTicketsSold;
+            $totalRevenue += $eventRevenue;
         }
 
         $bookings = Booking::findByOrganizerId($this->db, $this->id);
@@ -83,6 +99,10 @@ class Organizer extends User
                 // Delete bookings for this event directly to avoid foreign key violations
                 $delBookingsStmt = $this->db->prepare('DELETE FROM bookings WHERE event_id = :event_id');
                 $delBookingsStmt->execute(['event_id' => $eventId]);
+
+                // Delete this event's ticket classes before the event itself
+                $delClassesStmt = $this->db->prepare('DELETE FROM event_ticket_classes WHERE event_id = :event_id');
+                $delClassesStmt->execute(['event_id' => $eventId]);
 
                 // Delete the event
                 $event = Event::find($this->db, (int) $eventId);

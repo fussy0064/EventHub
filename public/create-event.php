@@ -11,14 +11,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim((string) ($_POST['name'] ?? ''));
     $location = trim((string) ($_POST['location'] ?? ''));
     $dateTime = (string) ($_POST['date_time'] ?? '');
-    $ticketsAvailable = (int) ($_POST['tickets_available'] ?? 0);
-    $price = (float) ($_POST['price'] ?? 0);
     $description = trim((string) ($_POST['description'] ?? ''));
 
-    if ($name === '' || $location === '' || $dateTime === '' || $description === '' || $ticketsAvailable < 1) {
+    // One price + ticket count per class: VVIP, VIP, Regular
+    $classInput = [];
+    $totalTickets = 0;
+    foreach (TicketClass::CLASSES as $className) {
+        $key = strtolower($className);
+        $classPrice = (float) ($_POST['price_' . $key] ?? 0);
+        $classTickets = (int) ($_POST['tickets_' . $key] ?? 0);
+        $classInput[$className] = ['price' => $classPrice, 'tickets' => $classTickets];
+        $totalTickets += $classTickets;
+    }
+
+    if ($name === '' || $location === '' || $dateTime === '' || $description === '') {
         $formError = 'Complete all event fields before saving.';
+    } elseif ($totalTickets < 1) {
+        $formError = 'Add at least one ticket in one of the classes (VVIP, VIP, or Regular).';
     } else {
         require_once __DIR__ . '/../classes/Event.php';
+        require_once __DIR__ . '/../classes/TicketClass.php';
 
         $db = app_db();
         $event = new Event($db);
@@ -27,10 +39,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $event->setDescription($description);
         $event->setDateTime($dateTime);
         $event->setLocation($location);
-        $event->setTicketsAvailable($ticketsAvailable);
-        $event->setPrice($price);
+        $event->setTicketsAvailable($totalTickets); // will be re-synced right after
+        $event->setPrice(0);
 
         if ($event->save()) {
+            foreach ($classInput as $className => $data) {
+                if ($data['tickets'] < 1) {
+                    continue; // skip classes the organizer left empty
+                }
+                $tc = new TicketClass($db);
+                $tc->setEventId((int) $event->getId());
+                $tc->setClassName($className);
+                $tc->setPrice($data['price']);
+                $tc->setTicketsAvailable($data['tickets']);
+                $tc->save();
+            }
+            TicketClass::syncEventTotals($db, (int) $event->getId());
+
             app_set_flash('success', 'Event created successfully.');
             app_redirect('/dashboard.php');
         } else {
@@ -38,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
+require_once __DIR__ . '/../classes/TicketClass.php';
 
 $pageTitle = 'Create Event';
 require __DIR__ . '/partials/header.php';
@@ -55,11 +82,28 @@ require __DIR__ . '/partials/header.php';
                         <div class="col-md-6"><label class="form-label">Event Name</label><input type="text" class="form-control" name="name" value="<?php echo htmlspecialchars((string) ($_POST['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required></div>
                         <div class="col-md-6"><label class="form-label">Location</label><input type="text" class="form-control" name="location" value="<?php echo htmlspecialchars((string) ($_POST['location'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required></div>
                         <div class="col-md-6"><label class="form-label">Date & Time</label><input type="datetime-local" class="form-control" name="date_time" value="<?php echo htmlspecialchars((string) ($_POST['date_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" required></div>
-                        <div class="col-md-3"><label class="form-label">Tickets</label><input type="number" class="form-control" name="tickets_available" min="1" value="<?php echo htmlspecialchars((string) ($_POST['tickets_available'] ?? '1'), ENT_QUOTES, 'UTF-8'); ?>" required></div>
-                        <div class="col-md-3"><label class="form-label">Price (Tshs)</label><input type="number" step="0.01" class="form-control" name="price" min="0" value="<?php echo htmlspecialchars((string) ($_POST['price'] ?? '0'), ENT_QUOTES, 'UTF-8'); ?>" required></div>
-                        <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="5" required><?php echo htmlspecialchars((string) ($_POST['description'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea></div>
+                        <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="4" required><?php echo htmlspecialchars((string) ($_POST['description'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea></div>
                     </div>
-                    <button type="submit" class="btn btn-primary mt-3">Save Event</button>
+
+                    <hr class="my-4">
+                    <h2 class="h6 mb-3">Ticket Classes (Tshs) — leave a class at 0 tickets to skip it</h2>
+                    <div class="row g-3">
+                        <?php foreach (TicketClass::CLASSES as $className): $key = strtolower($className); ?>
+                            <div class="col-md-4">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h3 class="h6"><?php echo $className; ?></h3>
+                                        <label class="form-label small">Price</label>
+                                        <input type="number" step="0.01" min="0" class="form-control mb-2" name="price_<?php echo $key; ?>" value="<?php echo htmlspecialchars((string) ($_POST['price_' . $key] ?? '0'), ENT_QUOTES, 'UTF-8'); ?>">
+                                        <label class="form-label small">Tickets</label>
+                                        <input type="number" min="0" class="form-control" name="tickets_<?php echo $key; ?>" value="<?php echo htmlspecialchars((string) ($_POST['tickets_' . $key] ?? '0'), ENT_QUOTES, 'UTF-8'); ?>">
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary mt-4">Save Event</button>
                 </form>
             </div>
         </div>
@@ -67,3 +111,4 @@ require __DIR__ . '/partials/header.php';
 </div>
 
 <?php require __DIR__ . '/partials/footer.php'; ?>
+

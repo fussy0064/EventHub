@@ -352,8 +352,8 @@ require __DIR__ . '/partials/header.php';
                                 <th>Created By</th>
                                 <th>Date & Time</th>
                                 <th>Location</th>
-                                <th>Price</th>
-                                <th>Tickets Left</th>
+                                <th>From Price</th>
+                                <th>Total Tickets Left</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -421,8 +421,7 @@ require __DIR__ . '/partials/header.php';
                             <th>Event Name</th>
                             <th>Date & Time</th>
                             <th>Location</th>
-                            <th>Tickets Remaining</th>
-                            <th>Price</th>
+                            <th>Classes (Price / Left)</th>
                             <th>Tickets Sold</th>
                             <th>Revenue</th>
                         </tr>
@@ -430,7 +429,7 @@ require __DIR__ . '/partials/header.php';
                         <tbody>
                         <?php if (empty($dashboardData['events'])): ?>
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">You have not created any events yet.</td>
+                                <td colspan="6" class="text-center text-muted py-4">You have not created any events yet.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($dashboardData['events'] as $e): ?>
@@ -440,15 +439,21 @@ require __DIR__ . '/partials/header.php';
                                     <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($eventObj->getDateTime())), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($eventObj->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td>
-                                        <?php if ($eventObj->getTicketsAvailable() > 0): ?>
-                                            <span class="badge bg-success"><?php echo $eventObj->getTicketsAvailable(); ?> left</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-danger">Sold Out</span>
-                                        <?php endif; ?>
+                                        <?php foreach ($e['classes'] as $class): ?>
+                                            <div class="small">
+                                                <span class="fw-semibold"><?php echo htmlspecialchars($class->getClassName(), ENT_QUOTES, 'UTF-8'); ?>:</span>
+                                                Tshs <?php echo number_format($class->getPrice(), 2); ?>
+                                                &middot;
+                                                <?php if ($class->getTicketsAvailable() > 0): ?>
+                                                    <?php echo $class->getTicketsAvailable(); ?> left
+                                                <?php else: ?>
+                                                    <span class="text-danger">Sold Out</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
                                     </td>
-                                    <td><?php echo htmlspecialchars('Tshs ' . number_format($eventObj->getPrice(), 2), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo $e['tickets_sold']; ?></td>
-                                    <td class="fw-semibold">Tshs <?php echo number_format($e['tickets_sold'] * $eventObj->getPrice(), 2); ?></td>
+                                    <td class="fw-semibold">Tshs <?php echo number_format($e['revenue'], 2); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -475,6 +480,7 @@ require __DIR__ . '/partials/header.php';
                                 <th>Attendee</th>
                                 <th>Email</th>
                                 <th>Event</th>
+                                <th>Class</th>
                                 <th>Tickets Booked</th>
                                 <th>Revenue</th>
                                 <th>Status</th>
@@ -484,7 +490,7 @@ require __DIR__ . '/partials/header.php';
                             <tbody>
                             <?php if (empty($bookings)): ?>
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">No bookings on file.</td>
+                                    <td colspan="9" class="text-center text-muted py-4">No bookings on file.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($bookings as $b): ?>
@@ -493,6 +499,7 @@ require __DIR__ . '/partials/header.php';
                                         <td class="fw-semibold"><?php echo htmlspecialchars($b['user_name'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['user_email'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['event_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars($b['ticket_class'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo $b['tickets_booked']; ?></td>
                                         <td>Tshs <?php echo number_format($b['tickets_booked'] * (float) $b['event_price'], 2); ?></td>
                                         <td>
@@ -548,6 +555,7 @@ require __DIR__ . '/partials/header.php';
                             <tr>
                                 <th>Ticket ID</th>
                                 <th>Event</th>
+                                <th>Class</th>
                                 <th>Date & Time</th>
                                 <th>Location</th>
                                 <th>Tickets Booked</th>
@@ -560,13 +568,14 @@ require __DIR__ . '/partials/header.php';
                             <tbody>
                             <?php if (empty($bookings)): ?>
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-4">You have not booked any events yet.</td>
+                                    <td colspan="10" class="text-center text-muted py-4">You have not booked any events yet.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($bookings as $b): ?>
                                     <tr>
                                         <td class="small text-muted"><?php echo htmlspecialchars(app_ticket_code((int) $b['event_id'], (int) $b['id']), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($b['event_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars($b['ticket_class'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($b['event_date_time'])), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['event_location'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo $b['tickets_booked']; ?></td>

@@ -35,20 +35,22 @@ class Attendee extends User
             $this->db->beginTransaction();
 
             require_once __DIR__ . '/Booking.php';
+            require_once __DIR__ . '/TicketClass.php';
             $bookings = Booking::findByUserId($this->db, $this->id);
             
-            // Restore event tickets for confirmed bookings
+            // Restore ticket class inventory for confirmed bookings
             foreach ($bookings as $bData) {
                 if ($bData['status'] === 'confirmed') {
                     $stmt = $this->db->prepare('
-                        UPDATE events
+                        UPDATE event_ticket_classes
                         SET tickets_available = tickets_available + :tickets
-                        WHERE id = :event_id
+                        WHERE id = :ticket_class_id
                     ');
                     $stmt->execute([
                         'tickets' => (int) $bData['tickets_booked'],
-                        'event_id' => (int) $bData['event_id']
+                        'ticket_class_id' => (int) $bData['ticket_class_id']
                     ]);
+                    TicketClass::syncEventTotals($this->db, (int) $bData['event_id']);
                 }
             }
 

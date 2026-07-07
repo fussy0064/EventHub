@@ -130,6 +130,14 @@ class User extends DatabaseModel
             ');
             $stmt->execute(['id' => $this->id]);
 
+            // Delete ticket classes for events this user organizes (if organizer)
+            $stmt = $this->db->prepare('
+                DELETE tc FROM event_ticket_classes tc
+                INNER JOIN events e ON tc.event_id = e.id
+                WHERE e.organizer_id = :id
+            ');
+            $stmt->execute(['id' => $this->id]);
+
             // Delete events this user organizes (if organizer)
             $stmt = $this->db->prepare('DELETE FROM events WHERE organizer_id = :id');
             $stmt->execute(['id' => $this->id]);
