@@ -164,3 +164,8 @@ function app_decrypt(string $ciphertext): string
     return $decrypted !== false ? $decrypted : '';
 }
 
+function app_ticket_code(int $eventId, int $bookingId): string
+{
+    return 'EHI-' . $eventId . '-' . $bookingId;
+}
+

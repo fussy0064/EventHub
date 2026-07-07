@@ -39,6 +39,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cance
     app_redirect('/dashboard.php');
 }
 
+// Handle organizer confirming a booking's payment
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'organizer_confirm_payment' && $user->getRole() === 'organizer') {
+    $bookingId = (int) ($_POST['booking_id'] ?? 0);
+    require_once __DIR__ . '/../classes/Booking.php';
+    require_once __DIR__ . '/../classes/Event.php';
+    $booking = Booking::find($db, $bookingId);
+
+    if ($booking === null) {
+        app_set_flash('error', 'Booking not found.');
+    } else {
+        $event = Event::find($db, $booking->getEventId());
+        if ($event === null || $event->getOrganizerId() !== $user->getId()) {
+            app_set_flash('error', 'Unauthorized action.');
+        } else {
+            $booking->setStatus('confirmed');
+            if ($booking->save()) {
+                app_set_flash('success', 'Payment confirmed. Ticket is now valid.');
+            } else {
+                app_set_flash('error', 'Failed to confirm payment.');
+            }
+        }
+    }
+    app_redirect('/dashboard.php');
+}
+
 $dashboardData = $user->getDashboard();
 $bookings = $dashboardData['bookings'] ?? [];
 $users = $dashboardData['users'] ?? [];
@@ -446,6 +471,7 @@ require __DIR__ . '/partials/header.php';
                         <table class="table table-bordered align-middle mb-0">
                             <thead class="table-light">
                             <tr>
+                                <th>Ticket ID</th>
                                 <th>Attendee</th>
                                 <th>Email</th>
                                 <th>Event</th>
@@ -458,11 +484,12 @@ require __DIR__ . '/partials/header.php';
                             <tbody>
                             <?php if (empty($bookings)): ?>
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">No bookings on file.</td>
+                                    <td colspan="8" class="text-center text-muted py-4">No bookings on file.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($bookings as $b): ?>
                                     <tr>
+                                        <td class="small text-muted"><?php echo htmlspecialchars(app_ticket_code((int) $b['event_id'], (int) $b['id']), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($b['user_name'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['user_email'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['event_name'], ENT_QUOTES, 'UTF-8'); ?></td>
@@ -471,19 +498,29 @@ require __DIR__ . '/partials/header.php';
                                         <td>
                                             <?php if ($b['status'] === 'confirmed'): ?>
                                                 <span class="badge bg-success">Confirmed</span>
+                                            <?php elseif ($b['status'] === 'pending'): ?>
+                                                <span class="badge bg-warning text-dark">Pending Payment</span>
                                             <?php else: ?>
                                                 <span class="badge bg-secondary">Cancelled</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($b['status'] === 'confirmed'): ?>
+                                            <div class="d-flex gap-1">
+                                            <?php if ($b['status'] === 'pending'): ?>
+                                                <form method="post" action="" onsubmit="return confirm('Confirm that payment was received for this booking?');">
+                                                    <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
+                                                    <button type="submit" name="action" value="organizer_confirm_payment" class="btn btn-sm btn-success">Confirm Payment</button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <?php if ($b['status'] !== 'cancelled'): ?>
                                                 <form method="post" action="" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
                                                     <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
-                                                    <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel Booking</button>
+                                                    <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel</button>
                                                 </form>
                                             <?php else: ?>
                                                 <span class="text-muted small">-</span>
                                             <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -509,6 +546,7 @@ require __DIR__ . '/partials/header.php';
                         <table class="table table-bordered align-middle mb-0">
                             <thead class="table-light">
                             <tr>
+                                <th>Ticket ID</th>
                                 <th>Event</th>
                                 <th>Date & Time</th>
                                 <th>Location</th>
@@ -522,11 +560,12 @@ require __DIR__ . '/partials/header.php';
                             <tbody>
                             <?php if (empty($bookings)): ?>
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">You have not booked any events yet.</td>
+                                    <td colspan="9" class="text-center text-muted py-4">You have not booked any events yet.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($bookings as $b): ?>
                                     <tr>
+                                        <td class="small text-muted"><?php echo htmlspecialchars(app_ticket_code((int) $b['event_id'], (int) $b['id']), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($b['event_name'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($b['event_date_time'])), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['event_location'], ENT_QUOTES, 'UTF-8'); ?></td>
@@ -536,14 +575,18 @@ require __DIR__ . '/partials/header.php';
                                         <td>
                                             <?php if ($b['status'] === 'confirmed'): ?>
                                                 <span class="badge bg-success">Confirmed</span>
+                                            <?php elseif ($b['status'] === 'pending'): ?>
+                                                <span class="badge bg-warning text-dark">Pending Payment</span>
                                             <?php else: ?>
                                                 <span class="badge bg-secondary">Cancelled</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($b['status'] === 'confirmed'): ?>
+                                            <?php if ($b['status'] !== 'cancelled'): ?>
                                                 <div class="d-flex gap-1">
-                                                    <a href="<?php echo app_url('/ticket.php?id=' . $b['id']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">Print Ticket</a>
+                                                    <?php if ($b['status'] === 'confirmed'): ?>
+                                                        <a href="<?php echo app_url('/ticket.php?id=' . $b['id']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">Print Ticket</a>
+                                                    <?php endif; ?>
                                                     <form method="post" action="" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
                                                         <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
                                                         <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel</button>

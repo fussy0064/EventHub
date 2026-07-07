@@ -60,6 +60,7 @@ $currentScript = basename($_SERVER['PHP_SELF']);
                 <a class="list-group-item list-group-item-action <?php echo ($currentScript === 'create-event.php') ? 'active' : ''; ?>" href="<?php echo app_url('/create-event.php'); ?>">Create Event</a>
             <?php endif; ?>
             <a class="list-group-item list-group-item-action" href="#" data-bs-toggle="modal" data-bs-target="#changePasswordModal" onclick="document.getElementById('sidebarOffcanvas').classList.remove('show');">Change Password</a>
+            <a class="list-group-item list-group-item-action" href="<?php echo app_url('/logout.php'); ?>">Logout</a>
         </div>
     </div>
 </div>

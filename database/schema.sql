@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     user_id INT NOT NULL,
     event_id INT NOT NULL,
     tickets_booked INT NOT NULL,
-    status ENUM('confirmed', 'cancelled') NOT NULL DEFAULT 'confirmed',
+    status ENUM('pending', 'confirmed', 'cancelled') NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_bookings_user FOREIGN KEY (user_id) REFERENCES users(id),
     CONSTRAINT fk_bookings_event FOREIGN KEY (event_id) REFERENCES events(id)

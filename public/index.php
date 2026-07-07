@@ -41,10 +41,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book'
             $booking->setUserId($targetUserId);
             $booking->setEventId($eventId);
             $booking->setTicketsBooked($tickets);
-            $booking->setStatus('confirmed');
+            $booking->setStatus('pending');
 
             if ($booking->save()) {
-                app_set_flash('success', 'Tickets booked successfully!');
+                app_set_flash('success', 'Tickets booked! Waiting for the organizer to confirm payment.');
                 app_redirect('/dashboard.php');
             }
         }
@@ -77,6 +77,7 @@ require __DIR__ . '/partials/header.php';
             <thead>
             <tr>
                 <th>Event</th>
+                <th>Description</th>
                 <th>Date & Time</th>
                 <th>Location</th>
                 <th>Price</th>
@@ -86,12 +87,13 @@ require __DIR__ . '/partials/header.php';
             <tbody>
             <?php if (empty($events)): ?>
                 <tr>
-                    <td colspan="5" class="text-center py-4 text-muted">No events found matching your search.</td>
+                    <td colspan="6" class="text-center py-4 text-muted">No events found matching your search.</td>
                 </tr>
             <?php else: ?>
                 <?php foreach ($events as $event): ?>
                     <tr>
                         <td class="fw-semibold"><?php echo htmlspecialchars($event->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td class="small"><?php echo htmlspecialchars($event->getDescription(), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($event->getDateTime())), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars($event->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars('Tshs ' . number_format($event->getPrice(), 2), ENT_QUOTES, 'UTF-8'); ?></td>

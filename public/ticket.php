@@ -16,7 +16,7 @@ $bookingId = (int) ($_GET['id'] ?? 0);
 $booking = Booking::find($db, $bookingId);
 
 if ($booking === null || $booking->getStatus() !== 'confirmed') {
-    app_set_flash('error', 'Ticket not found or booking is cancelled.');
+    app_set_flash('error', 'Ticket is not available yet — waiting for organizer to confirm payment.');
     app_redirect('/dashboard.php');
 }
 
@@ -50,7 +50,7 @@ require __DIR__ . '/partials/header.php';
             <div class="card-body">
                 <div class="text-center mb-4">
                     <h1 class="h4 mb-0">EventHub Ticket</h1>
-                    <span class="text-muted small">Booking #<?php echo $booking->getId(); ?></span>
+                    <span class="text-muted small"><?php echo htmlspecialchars(app_ticket_code($event->getId(), $booking->getId()), ENT_QUOTES, 'UTF-8'); ?></span>
                 </div>
                 <table class="table table-borderless mb-0">
                     <tr>

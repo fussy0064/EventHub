@@ -10,7 +10,7 @@ class Booking extends DatabaseModel
     private int $userId = 0;
     private int $eventId = 0;
     private int $ticketsBooked = 0;
-    private string $status = 'confirmed';
+    private string $status = 'pending';
 
     public function getId(): ?int
     {
@@ -54,7 +54,7 @@ class Booking extends DatabaseModel
 
     public function setStatus(string $status): void
     {
-        if (in_array($status, ['confirmed', 'cancelled'], true)) {
+        if (in_array($status, ['pending', 'confirmed', 'cancelled'], true)) {
             $this->status = $status;
         }
     }
@@ -139,7 +139,7 @@ class Booking extends DatabaseModel
                         'tickets' => $tickets,
                         'id' => $this->eventId
                     ]);
-                } elseif ($oldStatus === 'cancelled' && $this->status === 'confirmed') {
+                } elseif (in_array($oldStatus, ['cancelled', 'pending'], true) && $this->status === 'confirmed') {
                     $stmt = $this->db->prepare('SELECT tickets_available FROM events WHERE id = :id FOR UPDATE');
                     $stmt->execute(['id' => $this->eventId]);
                     $eventRow = $stmt->fetch();
