@@ -8,6 +8,7 @@ app_require_login();
 require_once __DIR__ . '/../classes/Booking.php';
 require_once __DIR__ . '/../classes/Event.php';
 require_once __DIR__ . '/../classes/User.php';
+require_once __DIR__ . '/../classes/TicketClass.php';
 
 $db = app_db();
 $currentUser = app_current_user();
@@ -16,12 +17,13 @@ $bookingId = (int) ($_GET['id'] ?? 0);
 $booking = Booking::find($db, $bookingId);
 
 if ($booking === null || $booking->getStatus() !== 'confirmed') {
-    app_set_flash('error', 'Ticket not found or booking is cancelled.');
+    app_set_flash('error', 'Ticket is not available yet — waiting for organizer to confirm payment.');
     app_redirect('/dashboard.php');
 }
 
 $event = Event::find($db, $booking->getEventId());
 $ticketOwner = User::findById($db, $booking->getUserId());
+$ticketClass = $booking->getTicketClassId() !== null ? TicketClass::find($db, $booking->getTicketClassId()) : null;
 
 // Only the ticket owner, the event's organizer, or an admin may view/print it
 $isOwner = $currentUser['id'] === $booking->getUserId();
@@ -33,7 +35,7 @@ if (!$isOwner && !$isOrganizerOfEvent && !$isAdmin) {
     app_redirect('/dashboard.php');
 }
 
-if ($event === null || $ticketOwner === null) {
+if ($event === null || $ticketOwner === null || $ticketClass === null) {
     app_set_flash('error', 'Ticket data is incomplete.');
     app_redirect('/dashboard.php');
 }
@@ -50,7 +52,7 @@ require __DIR__ . '/partials/header.php';
             <div class="card-body">
                 <div class="text-center mb-4">
                     <h1 class="h4 mb-0">EventHub Ticket</h1>
-                    <span class="text-muted small">Booking #<?php echo $booking->getId(); ?></span>
+                    <span class="text-muted small"><?php echo htmlspecialchars(app_ticket_code($event->getId(), $booking->getId()), ENT_QUOTES, 'UTF-8'); ?></span>
                 </div>
                 <table class="table table-borderless mb-0">
                     <tr>
@@ -70,12 +72,16 @@ require __DIR__ . '/partials/header.php';
                         <td><?php echo htmlspecialchars($ticketOwner->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                     </tr>
                     <tr>
+                        <th>Class</th>
+                        <td><span class="badge bg-primary"><?php echo htmlspecialchars($ticketClass->getClassName(), ENT_QUOTES, 'UTF-8'); ?></span></td>
+                    </tr>
+                    <tr>
                         <th>Tickets</th>
                         <td><?php echo $booking->getTicketsBooked(); ?></td>
                     </tr>
                     <tr>
                         <th>Total Paid</th>
-                        <td class="fw-semibold">Tshs <?php echo number_format($event->getPrice() * $booking->getTicketsBooked(), 2); ?></td>
+                        <td class="fw-semibold">Tshs <?php echo number_format($ticketClass->getPrice() * $booking->getTicketsBooked(), 2); ?></td>
                     </tr>
                     <tr>
                         <th>Status</th>

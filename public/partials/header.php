@@ -32,12 +32,12 @@ $currentScript = basename($_SERVER['PHP_SELF']);
         </button>
         <div class="collapse navbar-collapse" id="mainNav">
             <ul class="navbar-nav ms-auto">
-                <li class="nav-item"><a class="nav-link" href="<?php echo app_url('/index.php'); ?>">Browse</a></li>
                 <?php if ($currentUser === null): ?>
                     <li class="nav-item"><a class="nav-link" href="<?php echo app_url('/login.php'); ?>">Login</a></li>
-                    <li class="nav-item"><a class="nav-link" href="<?php echo app_url('/register.php'); ?>">Register</a></li>
+                    <?php if ($currentScript === 'index.php'): ?>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo app_url('/register.php'); ?>">Register</a></li>
+                    <?php endif; ?>
                 <?php else: ?>
-                    <li class="nav-item"><a class="nav-link" href="<?php echo app_url('/dashboard.php'); ?>">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?php echo app_url('/logout.php'); ?>">Logout</a></li>
                 <?php endif; ?>
             </ul>
@@ -60,6 +60,7 @@ $currentScript = basename($_SERVER['PHP_SELF']);
                 <a class="list-group-item list-group-item-action <?php echo ($currentScript === 'create-event.php') ? 'active' : ''; ?>" href="<?php echo app_url('/create-event.php'); ?>">Create Event</a>
             <?php endif; ?>
             <a class="list-group-item list-group-item-action" href="#" data-bs-toggle="modal" data-bs-target="#changePasswordModal" onclick="document.getElementById('sidebarOffcanvas').classList.remove('show');">Change Password</a>
+            <a class="list-group-item list-group-item-action" href="<?php echo app_url('/logout.php'); ?>">Logout</a>
         </div>
     </div>
 </div>

@@ -53,8 +53,11 @@ switch ($action) {
                 echo json_encode(['success' => false, 'message' => 'Failed to approve organizer.']);
             }
         } elseif ($approveAction === 'reject') {
-            if ($targetUser->delete()) {
-                echo json_encode(['success' => true, 'message' => 'Organizer rejected and removed.']);
+            // Rejecting keeps the account on file (marked rejected) instead of deleting it,
+            // so the organizer is notified rather than simply vanishing.
+            $targetUser->setRejected();
+            if ($targetUser->save()) {
+                echo json_encode(['success' => true, 'message' => 'Organizer rejected. They will be notified if they try to log in.']);
             } else {
                 echo json_encode(['success' => false, 'message' => 'Failed to reject organizer.']);
             }

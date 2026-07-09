@@ -11,7 +11,14 @@ class User extends DatabaseModel
     protected string $email = '';
     protected string $passwordHash = '';
     protected string $role = 'attendee';
-    protected bool $isApproved = true;
+
+    /**
+     * Approval status stored as a tri-state int in the `is_approved` column:
+     *   1  = approved
+     *   0  = pending admin review
+     *  -1  = rejected by admin (account kept, login blocked, user notified)
+     */
+    protected int $approvalStatus = 1;
 
     public function getId(): ?int
     {
@@ -63,12 +70,31 @@ class User extends DatabaseModel
 
     public function isApproved(): bool
     {
-        return $this->isApproved;
+        return $this->approvalStatus === 1;
     }
 
+    public function isPendingApproval(): bool
+    {
+        return $this->approvalStatus === 0;
+    }
+
+    public function isRejected(): bool
+    {
+        return $this->approvalStatus === -1;
+    }
+
+    /**
+     * @deprecated kept for backward compatibility: true => approved, false => pending.
+     * Use setRejected() to explicitly mark an account as rejected.
+     */
     public function setApproved(bool $approved): void
     {
-        $this->isApproved = $approved;
+        $this->approvalStatus = $approved ? 1 : 0;
+    }
+
+    public function setRejected(): void
+    {
+        $this->approvalStatus = -1;
     }
 
     public function save(): bool
@@ -89,7 +115,7 @@ class User extends DatabaseModel
                 'email' => $this->email,
                 'password_hash' => $this->passwordHash,
                 'role' => $this->role,
-                'is_approved' => $this->isApproved ? 1 : 0
+                'is_approved' => $this->approvalStatus
             ]);
             if ($result) {
                 $this->id = (int) $this->db->lastInsertId();
@@ -108,7 +134,7 @@ class User extends DatabaseModel
                 'email' => $this->email,
                 'password_hash' => $this->passwordHash,
                 'role' => $this->role,
-                'is_approved' => $this->isApproved ? 1 : 0
+                'is_approved' => $this->approvalStatus
             ]);
         }
     }
@@ -126,6 +152,14 @@ class User extends DatabaseModel
             $stmt = $this->db->prepare('
                 DELETE b FROM bookings b
                 INNER JOIN events e ON b.event_id = e.id
+                WHERE e.organizer_id = :id
+            ');
+            $stmt->execute(['id' => $this->id]);
+
+            // Delete ticket classes for events this user organizes (if organizer)
+            $stmt = $this->db->prepare('
+                DELETE tc FROM event_ticket_classes tc
+                INNER JOIN events e ON tc.event_id = e.id
                 WHERE e.organizer_id = :id
             ');
             $stmt->execute(['id' => $this->id]);
@@ -190,7 +224,7 @@ class User extends DatabaseModel
         $user->setEmail($row['email']);
         $user->passwordHash = $row['password_hash'];
         $user->setName(app_decrypt($row['name']));
-        $user->isApproved = (bool) ($row['is_approved'] ?? true);
+        $user->approvalStatus = (int) ($row['is_approved'] ?? 1);
         return $user;
     }
 }

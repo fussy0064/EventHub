@@ -139,6 +139,12 @@ For local development, use `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` in you
 - **Added:** Admin dashboard shows a full list of every event and who created it.
 - **Added:** Attendees can print a ticket (Dashboard → Print Ticket) after booking.
 - **Added:** Organizers can book a ticket for an attendee (by email) directly from the event listing page.
+- **Added:** New bookings start as "Pending Payment" — Organizer must click "Confirm Payment" before the ticket becomes valid/printable.
+- **Added:** Event description now shows to Attendees on the Browse Events page.
+- **Added:** Sidebar menu now includes Logout.
+- **Added:** Ticket ID shown everywhere as `EHI-{EventID}-{BookingID}`.
+- **Changed:** Top navbar simplified — Browse/Dashboard removed (already in sidebar); Register only shows on the Home page.
+- **Added:** Events now have 3 ticket classes (VVIP / VIP / Regular), each with its own price and ticket count, set by the Organizer when creating the event. Attendees pick a class when booking.
 
 ## Currency
 

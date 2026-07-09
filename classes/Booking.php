@@ -3,14 +3,16 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/DatabaseModel.php';
+require_once __DIR__ . '/TicketClass.php';
 
 class Booking extends DatabaseModel
 {
     private ?int $id = null;
     private int $userId = 0;
     private int $eventId = 0;
+    private ?int $ticketClassId = null;
     private int $ticketsBooked = 0;
-    private string $status = 'confirmed';
+    private string $status = 'pending';
 
     public function getId(): ?int
     {
@@ -37,6 +39,16 @@ class Booking extends DatabaseModel
         $this->eventId = $eventId;
     }
 
+    public function getTicketClassId(): ?int
+    {
+        return $this->ticketClassId;
+    }
+
+    public function setTicketClassId(?int $ticketClassId): void
+    {
+        $this->ticketClassId = $ticketClassId;
+    }
+
     public function getTicketsBooked(): int
     {
         return $this->ticketsBooked;
@@ -54,14 +66,14 @@ class Booking extends DatabaseModel
 
     public function setStatus(string $status): void
     {
-        if (in_array($status, ['confirmed', 'cancelled'], true)) {
+        if (in_array($status, ['pending', 'confirmed', 'cancelled'], true)) {
             $this->status = $status;
         }
     }
 
     public function save(): bool
     {
-        if (!$this->db) {
+        if (!$this->db || $this->ticketClassId === null) {
             return false;
         }
 
@@ -69,48 +81,50 @@ class Booking extends DatabaseModel
             $this->db->beginTransaction();
 
             if ($this->id === null) {
-                // Check tickets availability
-                $stmt = $this->db->prepare('SELECT tickets_available FROM events WHERE id = :id FOR UPDATE');
-                $stmt->execute(['id' => $this->eventId]);
-                $eventRow = $stmt->fetch();
+                // Check tickets availability on the chosen class
+                $stmt = $this->db->prepare('SELECT tickets_available FROM event_ticket_classes WHERE id = :id FOR UPDATE');
+                $stmt->execute(['id' => $this->ticketClassId]);
+                $classRow = $stmt->fetch();
 
-                if (!$eventRow) {
-                    throw new Exception('Event not found.');
+                if (!$classRow) {
+                    throw new Exception('Ticket class not found.');
                 }
 
-                $available = (int) $eventRow['tickets_available'];
+                $available = (int) $classRow['tickets_available'];
                 if ($available < $this->ticketsBooked) {
-                    throw new Exception('Not enough tickets available.');
+                    throw new Exception('Not enough tickets available in that class.');
                 }
 
                 // Insert booking
                 $stmt = $this->db->prepare('
-                    INSERT INTO bookings (user_id, event_id, tickets_booked, status)
-                    VALUES (:user_id, :event_id, :tickets_booked, :status)
+                    INSERT INTO bookings (user_id, event_id, ticket_class_id, tickets_booked, status)
+                    VALUES (:user_id, :event_id, :ticket_class_id, :tickets_booked, :status)
                 ');
                 $stmt->execute([
                     'user_id' => $this->userId,
                     'event_id' => $this->eventId,
+                    'ticket_class_id' => $this->ticketClassId,
                     'tickets_booked' => $this->ticketsBooked,
                     'status' => $this->status
                 ]);
                 $this->id = (int) $this->db->lastInsertId();
 
-                // Deduct tickets from event (only if status is confirmed)
+                // Deduct tickets from that class (only once payment is confirmed)
                 if ($this->status === 'confirmed') {
                     $stmt = $this->db->prepare('
-                        UPDATE events
+                        UPDATE event_ticket_classes
                         SET tickets_available = tickets_available - :booked
                         WHERE id = :id
                     ');
                     $stmt->execute([
                         'booked' => $this->ticketsBooked,
-                        'id' => $this->eventId
+                        'id' => $this->ticketClassId
                     ]);
+                    TicketClass::syncEventTotals($this->db, $this->eventId);
                 }
             } else {
                 // Update booking status
-                $stmt = $this->db->prepare('SELECT status, tickets_booked FROM bookings WHERE id = :id FOR UPDATE');
+                $stmt = $this->db->prepare('SELECT status, tickets_booked, ticket_class_id, event_id FROM bookings WHERE id = :id FOR UPDATE');
                 $stmt->execute(['id' => $this->id]);
                 $currentBooking = $stmt->fetch();
 
@@ -120,6 +134,8 @@ class Booking extends DatabaseModel
 
                 $oldStatus = $currentBooking['status'];
                 $tickets = (int) $currentBooking['tickets_booked'];
+                $classId = (int) $currentBooking['ticket_class_id'];
+                $eventId = (int) $currentBooking['event_id'];
 
                 // Update booking status
                 $stmt = $this->db->prepare('UPDATE bookings SET status = :status WHERE id = :id');
@@ -128,38 +144,40 @@ class Booking extends DatabaseModel
                     'id' => $this->id
                 ]);
 
-                // Adjust event inventory if status changed
+                // Adjust class inventory if status changed
                 if ($oldStatus === 'confirmed' && $this->status === 'cancelled') {
                     $stmt = $this->db->prepare('
-                        UPDATE events
+                        UPDATE event_ticket_classes
                         SET tickets_available = tickets_available + :tickets
                         WHERE id = :id
                     ');
                     $stmt->execute([
                         'tickets' => $tickets,
-                        'id' => $this->eventId
+                        'id' => $classId
                     ]);
-                } elseif ($oldStatus === 'cancelled' && $this->status === 'confirmed') {
-                    $stmt = $this->db->prepare('SELECT tickets_available FROM events WHERE id = :id FOR UPDATE');
-                    $stmt->execute(['id' => $this->eventId]);
-                    $eventRow = $stmt->fetch();
-                    if (!$eventRow) {
-                        throw new Exception('Event not found.');
+                    TicketClass::syncEventTotals($this->db, $eventId);
+                } elseif (in_array($oldStatus, ['cancelled', 'pending'], true) && $this->status === 'confirmed') {
+                    $stmt = $this->db->prepare('SELECT tickets_available FROM event_ticket_classes WHERE id = :id FOR UPDATE');
+                    $stmt->execute(['id' => $classId]);
+                    $classRow = $stmt->fetch();
+                    if (!$classRow) {
+                        throw new Exception('Ticket class not found.');
                     }
-                    $available = (int) $eventRow['tickets_available'];
+                    $available = (int) $classRow['tickets_available'];
                     if ($available < $tickets) {
                         throw new Exception('Not enough tickets available to confirm booking.');
                     }
 
                     $stmt = $this->db->prepare('
-                        UPDATE events
+                        UPDATE event_ticket_classes
                         SET tickets_available = tickets_available - :tickets
                         WHERE id = :id
                     ');
                     $stmt->execute([
                         'tickets' => $tickets,
-                        'id' => $this->eventId
+                        'id' => $classId
                     ]);
+                    TicketClass::syncEventTotals($this->db, $eventId);
                 }
             }
 
@@ -184,20 +202,21 @@ class Booking extends DatabaseModel
             $this->db->beginTransaction();
 
             // Check if we need to return tickets (only if booking was confirmed)
-            $stmt = $this->db->prepare('SELECT status, tickets_booked FROM bookings WHERE id = :id FOR UPDATE');
+            $stmt = $this->db->prepare('SELECT status, tickets_booked, ticket_class_id, event_id FROM bookings WHERE id = :id FOR UPDATE');
             $stmt->execute(['id' => $this->id]);
             $booking = $stmt->fetch();
 
             if ($booking && $booking['status'] === 'confirmed') {
                 $stmt = $this->db->prepare('
-                    UPDATE events
+                    UPDATE event_ticket_classes
                     SET tickets_available = tickets_available + :tickets
                     WHERE id = :id
                 ');
                 $stmt->execute([
                     'tickets' => (int) $booking['tickets_booked'],
-                    'id' => $this->eventId
+                    'id' => (int) $booking['ticket_class_id']
                 ]);
+                TicketClass::syncEventTotals($this->db, (int) $booking['event_id']);
             }
 
             $stmt = $this->db->prepare('DELETE FROM bookings WHERE id = :id');
@@ -226,6 +245,7 @@ class Booking extends DatabaseModel
         $booking->id = (int) $row['id'];
         $booking->userId = (int) $row['user_id'];
         $booking->eventId = (int) $row['event_id'];
+        $booking->ticketClassId = $row['ticket_class_id'] !== null ? (int) $row['ticket_class_id'] : null;
         $booking->ticketsBooked = (int) $row['tickets_booked'];
         $booking->setStatus($row['status']);
         return $booking;
@@ -234,9 +254,11 @@ class Booking extends DatabaseModel
     public static function findByUserId(PDO $db, int $userId): array
     {
         $stmt = $db->prepare('
-            SELECT b.*, e.name AS event_name, e.date_time AS event_date_time, e.location AS event_location, e.price AS event_price
+            SELECT b.*, e.name AS event_name, e.date_time AS event_date_time, e.location AS event_location,
+                   tc.price AS event_price, tc.class_name AS ticket_class
             FROM bookings b
             JOIN events e ON b.event_id = e.id
+            JOIN event_ticket_classes tc ON b.ticket_class_id = tc.id
             WHERE b.user_id = :user_id
             ORDER BY b.created_at DESC
         ');
@@ -253,9 +275,11 @@ class Booking extends DatabaseModel
     public static function findByOrganizerId(PDO $db, int $organizerId): array
     {
         $stmt = $db->prepare('
-            SELECT b.*, e.name AS event_name, e.price AS event_price, u.name AS user_name, u.email AS user_email
+            SELECT b.*, e.name AS event_name, tc.price AS event_price, tc.class_name AS ticket_class,
+                   u.name AS user_name, u.email AS user_email
             FROM bookings b
             JOIN events e ON b.event_id = e.id
+            JOIN event_ticket_classes tc ON b.ticket_class_id = tc.id
             JOIN users u ON b.user_id = u.id
             WHERE e.organizer_id = :organizer_id
             ORDER BY b.created_at DESC

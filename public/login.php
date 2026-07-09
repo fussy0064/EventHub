@@ -20,8 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = User::findByEmail(app_db(), $email);
 
         if ($user !== null && password_verify($password, $user->getPasswordHash())) {
-            // Check if the organizer account has been approved by admin
-            if ($user->getRole() === 'organizer' && !$user->isApproved()) {
+            // Organizer accounts must be approved by an admin before they can log in
+            if ($user->getRole() === 'organizer' && $user->isRejected()) {
+                $formError = 'Your organizer account application was rejected by an admin. Please contact support if you believe this is a mistake.';
+            } elseif ($user->getRole() === 'organizer' && $user->isPendingApproval()) {
                 $formError = 'Your organizer account is pending admin approval. Please wait for an admin to approve your account.';
             } else {
                 app_login_user([

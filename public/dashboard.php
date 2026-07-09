@@ -15,6 +15,20 @@ if ($user === null) {
     app_redirect('/login.php');
 }
 
+// Admins can navigate into a specific organizer's dashboard and perform the
+// same actions that organizer could (create/edit/delete their events, confirm
+// payments, etc.) without changing which account is actually logged in.
+$actingOrganizer = null;
+$organizerIdParam = (int) ($_POST['organizer_id'] ?? $_GET['organizer_id'] ?? 0);
+if ($user->getRole() === 'admin' && $organizerIdParam > 0) {
+    require_once __DIR__ . '/../classes/Organizer.php';
+    $candidateOrganizer = User::findById($db, $organizerIdParam);
+    if ($candidateOrganizer !== null && $candidateOrganizer->getRole() === 'organizer') {
+        $actingOrganizer = $candidateOrganizer;
+    }
+}
+$backSuffix = $actingOrganizer !== null ? ('?organizer_id=' . $actingOrganizer->getId()) : '';
+
 // Handle cancellation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cancel_booking') {
     $bookingId = (int) ($_POST['booking_id'] ?? 0);
@@ -25,6 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cance
         // Attendees can only cancel their own bookings
         if ($user->getRole() === 'attendee' && $booking->getUserId() !== $user->getId()) {
             app_set_flash('error', 'Unauthorized action.');
+        } elseif ($booking->getStatus() === 'confirmed' && $user->getRole() !== 'admin') {
+            // Once a booking is confirmed, only an admin may edit/cancel it —
+            // the attendee (or organizer) can no longer change it themselves.
+            app_set_flash('error', 'This ticket is already confirmed. Only an admin can cancel or edit a confirmed booking.');
         } else {
             $booking->setStatus('cancelled');
             if ($booking->save()) {
@@ -36,10 +54,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cance
     } else {
         app_set_flash('error', 'Booking not found.');
     }
-    app_redirect('/dashboard.php');
+    app_redirect('/dashboard.php' . $backSuffix);
 }
 
-$dashboardData = $user->getDashboard();
+// Handle organizer (or admin) confirming a booking's payment
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'organizer_confirm_payment' && in_array($user->getRole(), ['organizer', 'admin'], true)) {
+    $bookingId = (int) ($_POST['booking_id'] ?? 0);
+    require_once __DIR__ . '/../classes/Booking.php';
+    require_once __DIR__ . '/../classes/Event.php';
+    $booking = Booking::find($db, $bookingId);
+
+    if ($booking === null) {
+        app_set_flash('error', 'Booking not found.');
+    } else {
+        $event = Event::find($db, $booking->getEventId());
+        if ($event === null || ($user->getRole() === 'organizer' && $event->getOrganizerId() !== $user->getId())) {
+            app_set_flash('error', 'Unauthorized action.');
+        } else {
+            $booking->setStatus('confirmed');
+            if ($booking->save()) {
+                app_set_flash('success', 'Payment confirmed. Ticket is now valid.');
+            } else {
+                app_set_flash('error', 'Failed to confirm payment.');
+            }
+        }
+    }
+    app_redirect('/dashboard.php' . $backSuffix);
+}
+
+// Handle Event Deletion (organizer can delete own events, admin can delete any event)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_event' && in_array($user->getRole(), ['organizer', 'admin'], true)) {
+    require_once __DIR__ . '/../classes/Event.php';
+    $eventId = (int) ($_POST['event_id'] ?? 0);
+    $eventToDelete = Event::find($db, $eventId);
+
+    if ($eventToDelete === null) {
+        app_set_flash('error', 'Event not found.');
+    } elseif ($user->getRole() === 'organizer' && $eventToDelete->getOrganizerId() !== $user->getId()) {
+        app_set_flash('error', 'Unauthorized action.');
+    } else {
+        if (Event::deleteWithRelations($db, $eventId)) {
+            app_set_flash('success', 'Event deleted successfully.');
+        } else {
+            app_set_flash('error', 'Failed to delete event.');
+        }
+    }
+    app_redirect('/dashboard.php' . $backSuffix);
+}
+
+if ($actingOrganizer !== null) {
+    // Show the exact same dashboard the organizer would see, so an admin can
+    // do the same work as that organizer (create/edit/delete events, confirm
+    // payments, etc.) without switching accounts.
+    $dashboardData = $actingOrganizer->getDashboard();
+    $dashboardData['title'] = 'Managing Organizer: ' . $actingOrganizer->getName();
+} else {
+    $dashboardData = $user->getDashboard();
+}
 $bookings = $dashboardData['bookings'] ?? [];
 $users = $dashboardData['users'] ?? [];
 
@@ -63,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'chang
             app_set_flash('error', 'Failed to update your password.');
         }
     }
-    app_redirect('/dashboard.php');
+    app_redirect('/dashboard.php' . $backSuffix);
 }
 
 // Handle Admin Actions
@@ -86,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user->getRole() === 'admin') {
                 app_set_flash('error', 'User not found.');
             }
         }
-        app_redirect('/dashboard.php');
+        app_redirect('/dashboard.php' . $backSuffix);
     }
 
     if ($action === 'admin_change_password') {
@@ -108,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user->getRole() === 'admin') {
                 app_set_flash('error', 'User not found.');
             }
         }
-        app_redirect('/dashboard.php');
+        app_redirect('/dashboard.php' . $backSuffix);
     }
 
     if ($action === 'admin_change_role') {
@@ -130,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user->getRole() === 'admin') {
                 app_set_flash('error', 'User not found.');
             }
         }
-        app_redirect('/dashboard.php');
+        app_redirect('/dashboard.php' . $backSuffix);
     }
 
     if ($action === 'admin_approve_organizer') {
@@ -147,9 +218,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user->getRole() === 'admin') {
                     app_set_flash('error', 'Failed to approve organizer.');
                 }
             } elseif ($approveAction === 'reject') {
-                // Rejecting deletes the unapproved organizer account
-                if ($targetUser->delete()) {
-                    app_set_flash('success', 'Organizer rejected and removed.');
+                // Rejecting keeps the account on file (marked rejected) instead of
+                // deleting it, so the organizer is notified rather than vanishing.
+                $targetUser->setRejected();
+                if ($targetUser->save()) {
+                    app_set_flash('success', 'Organizer rejected. They will be notified if they try to log in.');
                 } else {
                     app_set_flash('error', 'Failed to reject organizer.');
                 }
@@ -157,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user->getRole() === 'admin') {
         } else {
             app_set_flash('error', 'User not found or is not an organizer.');
         }
-        app_redirect('/dashboard.php');
+        app_redirect('/dashboard.php' . $backSuffix);
     }
 }
 
@@ -189,6 +262,17 @@ require __DIR__ . '/partials/header.php';
 ?>
 <div class="row g-4">
     <div class="col-12">
+        <?php if ($actingOrganizer !== null): ?>
+            <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+                <div>
+                    <strong>Managing as Organizer:</strong>
+                    <?php echo htmlspecialchars($actingOrganizer->getName(), ENT_QUOTES, 'UTF-8'); ?>
+                    <span class="text-muted">(<?php echo htmlspecialchars($actingOrganizer->getEmail(), ENT_QUOTES, 'UTF-8'); ?>)</span>
+                    — you're seeing and can do everything this organizer can.
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="<?php echo app_url('/dashboard.php'); ?>">Back to Admin Dashboard</a>
+            </div>
+        <?php endif; ?>
         <!-- Welcome banner -->
         <div class="card shadow-sm mb-4">
             <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -198,7 +282,7 @@ require __DIR__ . '/partials/header.php';
                 </div>
                 <div class="d-flex gap-2">
                 <?php if ($user->getRole() === 'organizer' || $user->getRole() === 'admin'): ?>
-                    <a class="btn btn-primary" href="<?php echo app_url('/create-event.php'); ?>">Create Event</a>
+                    <a class="btn btn-primary" href="<?php echo app_url('/create-event.php' . $backSuffix); ?>">Create Event</a>
                 <?php endif; ?>
                 <?php if ($user->getRole() === 'admin'): ?>
                     <a class="btn btn-outline-primary" href="<?php echo app_url('/create-user.php'); ?>">Create User</a>
@@ -243,7 +327,17 @@ require __DIR__ . '/partials/header.php';
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($users as $u): ?>
-                                    <tr id="user-row-<?php echo $u->getId(); ?>" class="<?php echo ($u->getRole() === 'organizer' && !$u->isApproved()) ? 'table-warning' : ''; ?>">
+                                    <?php
+                                        $userRowClass = '';
+                                        if ($u->getRole() === 'organizer') {
+                                            if ($u->isRejected()) {
+                                                $userRowClass = 'table-danger';
+                                            } elseif ($u->isPendingApproval()) {
+                                                $userRowClass = 'table-warning';
+                                            }
+                                        }
+                                    ?>
+                                    <tr id="user-row-<?php echo $u->getId(); ?>" class="<?php echo $userRowClass; ?>">
                                         <td><?php echo $u->getId(); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($u->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($u->getEmail(), ENT_QUOTES, 'UTF-8'); ?></td>
@@ -263,7 +357,15 @@ require __DIR__ . '/partials/header.php';
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($u->getRole() === 'organizer' && !$u->isApproved()): ?>
+                                            <?php if ($u->getRole() === 'organizer' && $u->isRejected()): ?>
+                                                <span class="badge bg-danger js-status-badge">Rejected</span>
+                                                <div class="d-inline-flex gap-1 mt-1">
+                                                    <button type="button" class="btn btn-sm btn-success js-admin-action"
+                                                        data-action="admin_approve_organizer" data-approve-action="approve"
+                                                        data-user-id="<?php echo $u->getId(); ?>"
+                                                        data-confirm="Approve this organizer? This reverses the rejection.">Approve</button>
+                                                </div>
+                                            <?php elseif ($u->getRole() === 'organizer' && $u->isPendingApproval()): ?>
                                                 <span class="badge bg-warning text-dark js-status-badge">Pending Approval</span>
                                                 <div class="d-inline-flex gap-1 mt-1">
                                                     <button type="button" class="btn btn-sm btn-success js-admin-action"
@@ -273,7 +375,7 @@ require __DIR__ . '/partials/header.php';
                                                     <button type="button" class="btn btn-sm btn-danger js-admin-action"
                                                         data-action="admin_approve_organizer" data-approve-action="reject"
                                                         data-user-id="<?php echo $u->getId(); ?>"
-                                                        data-confirm="Reject and delete this organizer account?">Reject</button>
+                                                        data-confirm="Reject this organizer account? Their account is kept but they will not be able to log in, and will be notified if they try.">Reject</button>
                                                 </div>
                                             <?php elseif ($u->isApproved()): ?>
                                                 <span class="badge bg-success">Approved</span>
@@ -283,6 +385,9 @@ require __DIR__ . '/partials/header.php';
                                         </td>
                                         <td>
                                             <div class="d-inline-flex gap-2 align-items-center">
+                                                <?php if ($u->getRole() === 'organizer' && $u->isApproved()): ?>
+                                                    <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/dashboard.php?organizer_id=' . $u->getId()); ?>">Manage</a>
+                                                <?php endif; ?>
                                                 <!-- Change Password Inline Form -->
                                                 <form method="post" action="" class="d-inline-flex align-items-center gap-1" onsubmit="return confirm('Are you sure you want to change this user\'s password?');">
                                                     <input type="hidden" name="user_id" value="<?php echo $u->getId(); ?>">
@@ -327,18 +432,20 @@ require __DIR__ . '/partials/header.php';
                                 <th>Created By</th>
                                 <th>Date & Time</th>
                                 <th>Location</th>
-                                <th>Price</th>
-                                <th>Tickets Left</th>
+                                <th>From Price</th>
+                                <th>Total Tickets Left</th>
+                                <th>Status</th>
+                                <th>Actions</th>
                             </tr>
                             </thead>
                             <tbody>
                             <?php if (empty($dashboardData['events'])): ?>
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">No events created yet.</td>
+                                    <td colspan="8" class="text-center text-muted py-4">No events created yet.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($dashboardData['events'] as $ev): ?>
-                                    <?php $evObj = $ev['object']; ?>
+                                    <?php $evObj = $ev['object']; $statusBadge = $evObj->getStatusBadge(); ?>
                                     <tr>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($evObj->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($ev['organizer_name'], ENT_QUOTES, 'UTF-8'); ?> <span class="text-muted small">(<?php echo htmlspecialchars($ev['organizer_email'], ENT_QUOTES, 'UTF-8'); ?>)</span></td>
@@ -346,6 +453,18 @@ require __DIR__ . '/partials/header.php';
                                         <td><?php echo htmlspecialchars($evObj->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td>Tshs <?php echo number_format($evObj->getPrice(), 2); ?></td>
                                         <td><?php echo $evObj->getTicketsAvailable(); ?></td>
+                                        <td><span class="badge <?php echo $statusBadge['badge']; ?>"><?php echo htmlspecialchars($statusBadge['label'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <?php if ($evObj->getStatus() !== 'done'): ?>
+                                                    <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/edit-event.php?id=' . $evObj->getId()); ?>">Edit</a>
+                                                <?php endif; ?>
+                                                <form method="post" action="" onsubmit="return confirm('Are you sure you want to delete this event? This will also remove its ticket classes and bookings.');">
+                                                    <input type="hidden" name="event_id" value="<?php echo $evObj->getId(); ?>">
+                                                    <button type="submit" name="action" value="delete_event" class="btn btn-sm btn-danger">Delete</button>
+                                                </form>
+                                            </div>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -396,34 +515,53 @@ require __DIR__ . '/partials/header.php';
                             <th>Event Name</th>
                             <th>Date & Time</th>
                             <th>Location</th>
-                            <th>Tickets Remaining</th>
-                            <th>Price</th>
+                            <th>Classes (Price / Left)</th>
                             <th>Tickets Sold</th>
                             <th>Revenue</th>
+                            <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                         </thead>
                         <tbody>
                         <?php if (empty($dashboardData['events'])): ?>
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">You have not created any events yet.</td>
+                                <td colspan="8" class="text-center text-muted py-4">You have not created any events yet.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($dashboardData['events'] as $e): ?>
-                                <?php $eventObj = $e['object']; ?>
+                                <?php $eventObj = $e['object']; $statusBadge = $eventObj->getStatusBadge(); ?>
                                 <tr>
                                     <td class="fw-semibold"><?php echo htmlspecialchars($eventObj->getName(), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($eventObj->getDateTime())), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($eventObj->getLocation(), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td>
-                                        <?php if ($eventObj->getTicketsAvailable() > 0): ?>
-                                            <span class="badge bg-success"><?php echo $eventObj->getTicketsAvailable(); ?> left</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-danger">Sold Out</span>
-                                        <?php endif; ?>
+                                        <?php foreach ($e['classes'] as $class): ?>
+                                            <div class="small">
+                                                <span class="fw-semibold"><?php echo htmlspecialchars($class->getClassName(), ENT_QUOTES, 'UTF-8'); ?>:</span>
+                                                Tshs <?php echo number_format($class->getPrice(), 2); ?>
+                                                &middot;
+                                                <?php if ($class->getTicketsAvailable() > 0): ?>
+                                                    <?php echo $class->getTicketsAvailable(); ?> left
+                                                <?php else: ?>
+                                                    <span class="text-danger">Sold Out</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
                                     </td>
-                                    <td><?php echo htmlspecialchars('Tshs ' . number_format($eventObj->getPrice(), 2), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo $e['tickets_sold']; ?></td>
-                                    <td class="fw-semibold">Tshs <?php echo number_format($e['tickets_sold'] * $eventObj->getPrice(), 2); ?></td>
+                                    <td class="fw-semibold">Tshs <?php echo number_format($e['revenue'], 2); ?></td>
+                                    <td><span class="badge <?php echo $statusBadge['badge']; ?>"><?php echo htmlspecialchars($statusBadge['label'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                    <td>
+                                        <div class="d-flex gap-1">
+                                            <?php if ($eventObj->getStatus() !== 'done'): ?>
+                                                <a class="btn btn-sm btn-outline-primary" href="<?php echo app_url('/edit-event.php?id=' . $eventObj->getId()); ?>">Edit</a>
+                                            <?php endif; ?>
+                                            <form method="post" action="" onsubmit="return confirm('Are you sure you want to delete this event? This will also remove its ticket classes and bookings.');">
+                                                <input type="hidden" name="event_id" value="<?php echo $eventObj->getId(); ?>">
+                                                <button type="submit" name="action" value="delete_event" class="btn btn-sm btn-danger">Delete</button>
+                                            </form>
+                                        </div>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -446,9 +584,11 @@ require __DIR__ . '/partials/header.php';
                         <table class="table table-bordered align-middle mb-0">
                             <thead class="table-light">
                             <tr>
+                                <th>Ticket ID</th>
                                 <th>Attendee</th>
                                 <th>Email</th>
                                 <th>Event</th>
+                                <th>Class</th>
                                 <th>Tickets Booked</th>
                                 <th>Revenue</th>
                                 <th>Status</th>
@@ -458,32 +598,46 @@ require __DIR__ . '/partials/header.php';
                             <tbody>
                             <?php if (empty($bookings)): ?>
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">No bookings on file.</td>
+                                    <td colspan="9" class="text-center text-muted py-4">No bookings on file.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($bookings as $b): ?>
                                     <tr>
+                                        <td class="small text-muted"><?php echo htmlspecialchars(app_ticket_code((int) $b['event_id'], (int) $b['id']), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($b['user_name'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['user_email'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['event_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars($b['ticket_class'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo $b['tickets_booked']; ?></td>
                                         <td>Tshs <?php echo number_format($b['tickets_booked'] * (float) $b['event_price'], 2); ?></td>
                                         <td>
                                             <?php if ($b['status'] === 'confirmed'): ?>
                                                 <span class="badge bg-success">Confirmed</span>
+                                            <?php elseif ($b['status'] === 'pending'): ?>
+                                                <span class="badge bg-warning text-dark">Pending Payment</span>
                                             <?php else: ?>
                                                 <span class="badge bg-secondary">Cancelled</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($b['status'] === 'confirmed'): ?>
+                                            <div class="d-flex gap-1">
+                                            <?php if ($b['status'] === 'pending'): ?>
+                                                <form method="post" action="" onsubmit="return confirm('Confirm that payment was received for this booking?');">
+                                                    <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
+                                                    <button type="submit" name="action" value="organizer_confirm_payment" class="btn btn-sm btn-success">Confirm Payment</button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <?php if ($b['status'] === 'cancelled'): ?>
+                                                <span class="text-muted small">-</span>
+                                            <?php elseif ($b['status'] === 'confirmed' && $user->getRole() !== 'admin'): ?>
+                                                <span class="text-muted small" title="Only an admin can cancel a confirmed booking.">Locked</span>
+                                            <?php else: ?>
                                                 <form method="post" action="" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
                                                     <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
-                                                    <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel Booking</button>
+                                                    <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel</button>
                                                 </form>
-                                            <?php else: ?>
-                                                <span class="text-muted small">-</span>
                                             <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -509,7 +663,9 @@ require __DIR__ . '/partials/header.php';
                         <table class="table table-bordered align-middle mb-0">
                             <thead class="table-light">
                             <tr>
+                                <th>Ticket ID</th>
                                 <th>Event</th>
+                                <th>Class</th>
                                 <th>Date & Time</th>
                                 <th>Location</th>
                                 <th>Tickets Booked</th>
@@ -522,12 +678,14 @@ require __DIR__ . '/partials/header.php';
                             <tbody>
                             <?php if (empty($bookings)): ?>
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">You have not booked any events yet.</td>
+                                    <td colspan="10" class="text-center text-muted py-4">You have not booked any events yet.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($bookings as $b): ?>
                                     <tr>
+                                        <td class="small text-muted"><?php echo htmlspecialchars(app_ticket_code((int) $b['event_id'], (int) $b['id']), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td class="fw-semibold"><?php echo htmlspecialchars($b['event_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars($b['ticket_class'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars(date('M d, Y h:i A', strtotime($b['event_date_time'])), ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo htmlspecialchars($b['event_location'], ENT_QUOTES, 'UTF-8'); ?></td>
                                         <td><?php echo $b['tickets_booked']; ?></td>
@@ -536,21 +694,27 @@ require __DIR__ . '/partials/header.php';
                                         <td>
                                             <?php if ($b['status'] === 'confirmed'): ?>
                                                 <span class="badge bg-success">Confirmed</span>
+                                            <?php elseif ($b['status'] === 'pending'): ?>
+                                                <span class="badge bg-warning text-dark">Pending Payment</span>
                                             <?php else: ?>
                                                 <span class="badge bg-secondary">Cancelled</span>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ($b['status'] === 'confirmed'): ?>
+                                            <?php if ($b['status'] === 'cancelled'): ?>
+                                                <button class="btn btn-sm btn-outline-secondary" disabled>Cancelled</button>
+                                            <?php elseif ($b['status'] === 'confirmed'): ?>
                                                 <div class="d-flex gap-1">
                                                     <a href="<?php echo app_url('/ticket.php?id=' . $b['id']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">Print Ticket</a>
+                                                    <button class="btn btn-sm btn-outline-secondary" disabled title="Confirmed bookings can only be changed by an admin.">Locked</button>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="d-flex gap-1">
                                                     <form method="post" action="" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
                                                         <input type="hidden" name="booking_id" value="<?php echo $b['id']; ?>">
                                                         <button type="submit" name="action" value="cancel_booking" class="btn btn-sm btn-danger">Cancel</button>
                                                     </form>
                                                 </div>
-                                            <?php else: ?>
-                                                <button class="btn btn-sm btn-outline-secondary" disabled>Cancelled</button>
                                             <?php endif; ?>
                                         </td>
                                     </tr>

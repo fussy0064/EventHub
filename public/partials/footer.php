@@ -108,28 +108,17 @@ document.addEventListener('click', function (e) {
                 return;
             }
 
-            if (action === 'admin_delete_user' || approveAction === 'reject') {
+            if (action === 'admin_delete_user') {
                 if (row) row.remove();
-            } else if (action === 'admin_approve_organizer' && approveAction === 'approve') {
-                if (row) {
-                    const statusCell = row.querySelector('td:nth-child(5)');
-                    if (statusCell) {
-                        statusCell.innerHTML = '<span class="badge bg-success">Approved</span>';
-                    }
-                }
+                return;
             }
 
+            // Approve/reject can change several things at once (status badge,
+            // available actions, pending-count banner) — reload for a
+            // guaranteed-correct render instead of patching the DOM by hand.
             if (action === 'admin_approve_organizer') {
-                const countEl = document.getElementById('pending-organizers-count');
-                const banner = document.getElementById('pending-organizers-banner');
-                if (countEl) {
-                    const remaining = Math.max(0, parseInt(countEl.textContent, 10) - 1);
-                    if (remaining === 0 && banner) {
-                        banner.style.display = 'none';
-                    } else {
-                        countEl.textContent = remaining + ' organizer(s)';
-                    }
-                }
+                window.location.reload();
+                return;
             }
         })
         .catch(function () {
